@@ -16,3 +16,17 @@ hs_err_pid*
 *.classpath
 *.project
 *.settings
+
+# IntelliJ IDEA
+*.iml
+
+## Directory-based project format:
+.idea/
+
+## File-based project format:
+*.ipr
+*.iws
+
+## Plugin-specific files:
+# IntelliJ
+out/
