@@ -1,8 +1,8 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.java.tuple.Tuple3;
+
 import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Represents a partition centric graph's nodes.
@@ -13,14 +13,14 @@ import java.util.Map;
  * @param <VV> The type of a vertex's value
  * @param <EV> The type of an edge's value
  */
-public class PCVertex<K, VV, EV> extends Tuple3<K, VV, Map<K,EV>> {
+public class PCVertex<K, VV, EV> extends Tuple3<K, VV, HashMap<K, EV>> {
     private static final long serialVersionUID = 1L;
 
     public PCVertex() {
         this.f2 = new HashMap<>();
     }
 
-    public PCVertex(K id, VV value, Map<K, EV> edges) {
+    public PCVertex(K id, VV value, HashMap<K, EV> edges) {
         this.f0 = id;
         this.f1 = value;
         this.f2 = edges;
@@ -42,11 +42,11 @@ public class PCVertex<K, VV, EV> extends Tuple3<K, VV, Map<K,EV>> {
         this.f1 = value;
     }
 
-    public Map<K, EV> getEdges() {
+    public HashMap<K, EV> getEdges() {
         return f2;
     }
 
-    public void setEdges(Map<K, EV> edges) {
+    public void setEdges(HashMap<K, EV> edges) {
         this.f2 = edges;
     }
 
