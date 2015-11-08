@@ -66,6 +66,8 @@ public class PartitionCentricConnectedComponent {
 
         ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
 
+        environment.getConfig().disableSysoutLogging();
+
         Graph<Integer, Integer, Integer> graph = Graph.fromCollection(vertices, edges, environment);
 
         PCGraph<Integer, Integer, Integer> pcGraph = PCGraph.fromGraph(graph);
