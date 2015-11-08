@@ -26,7 +26,9 @@ public class PartitionCentricConnectedComponent {
                 new Vertex<>(4, 4),
                 new Vertex<>(5, 5),
                 new Vertex<>(6, 6),
-                new Vertex<>(7, 7)
+                new Vertex<>(7, 7),
+                new Vertex<>(8, 8),
+                new Vertex<>(9, 9)
         );
         Collection<Edge<Integer, Integer>> edges = Arrays.asList(
                 new Edge<>(1, 2, 1),
@@ -118,7 +120,7 @@ public class PartitionCentricConnectedComponent {
             }
 
             if (updatedVertex) {
-                collector.collect(new Tuple2<>(partitionId, new HashSet<>(verticesMap.values())));
+                updatePartition(verticesMap.values());
             }
         }
     }

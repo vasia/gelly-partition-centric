@@ -250,6 +250,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             Iterator<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> partitionIter = second.iterator();
             if (partitionIter.hasNext()) {
                 Tuple2<Long, HashSet<PCVertex<K, VV, EV>>> partition = partitionIter.next();
+                updateFunction.setUpdated(false);
                 updateFunction.setPartitionId(partition.f0);
                 updateFunction.setCollector(out);
                 updateFunction.updatePartition(partition.f1, first);
