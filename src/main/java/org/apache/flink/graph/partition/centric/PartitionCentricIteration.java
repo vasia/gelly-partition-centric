@@ -194,8 +194,11 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
         @Override
         public void open(Configuration parameters) throws Exception {
-            this.messagingFunction.setCurrentStep(getIterationRuntimeContext().getSuperstepNumber());
-            this.messagingFunction.init(partitionMap);
+            int currentStep = getIterationRuntimeContext().getSuperstepNumber();
+            if (currentStep == 1) {
+                this.messagingFunction.init(partitionMap);
+            }
+            this.messagingFunction.setCurrentStep(currentStep);
         }
 
         @Override
