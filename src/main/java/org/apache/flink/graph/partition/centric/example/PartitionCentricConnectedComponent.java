@@ -64,6 +64,7 @@ public class PartitionCentricConnectedComponent {
      * Partition update function
      */
     public static class CCPartitionUpdateFunction extends PartitionUpdateFunction<Integer, Integer, Integer, Integer> {
+        private static final long serialVersionUID = 1L;
 
         @Override
         public void updatePartition(
@@ -126,6 +127,7 @@ public class PartitionCentricConnectedComponent {
      * Partition messaging function
      */
     public static class CCPartitionMessagingFunction extends PartitionMessagingFunction<Integer, Integer, Integer, Integer> {
+        private static final long serialVersionUID = 1L;
 
         @Override
         public void sendMessages() {

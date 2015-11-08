@@ -15,6 +15,7 @@ import java.util.Map;
  * @param <EV>
  */
 public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements Serializable {
+    private static final long serialVersionUID = 1L;
     private Tuple3<Long, K, Message> outValue;
     private Collector<Tuple3<Long, K, Message>> collector;
     private Map<K, Long> partitionMap;

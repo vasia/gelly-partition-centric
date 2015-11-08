@@ -225,6 +225,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>,
             Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> implements
             ResultTypeQueryable<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> {
+        private static final long serialVersionUID = 1L;
 
         private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
         private transient TypeInformation<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> resultType;
@@ -269,6 +270,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
     private static class PartitionMapFunction<K, VV, EV> extends
             RichFlatMapFunction<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>, Tuple2<K, Long>> implements
             ResultTypeQueryable<Tuple2<K, Long>> {
+        private static final long serialVersionUID = 1L;
 
         private transient TypeInformation<Tuple2<K, Long>> resultType;
 
