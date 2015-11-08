@@ -25,6 +25,7 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 
@@ -40,7 +41,7 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
     private static final long serialVersionUID = 1L;
     protected int currentStep;
     protected Long partitionId;
-    protected Collector<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> collector;
+    protected Collector<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> collector;
     protected boolean updated;
 
     public void setCurrentStep(int currentStep) {
@@ -51,7 +52,7 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
         this.partitionId = partitionId;
     }
 
-    public void setCollector(Collector<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> collector) {
+    public void setCollector(Collector<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> collector) {
         this.collector = collector;
     }
 
@@ -68,7 +69,7 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
         // Only need to collect the partition once.
         if (!updated) {
             updated = true;
-            collector.collect(new Tuple2<>(partitionId, new HashSet<>(updatedValue)));
+            collector.collect(new Tuple2<>(partitionId, new ArrayList<>(updatedValue)));
         }
     }
 

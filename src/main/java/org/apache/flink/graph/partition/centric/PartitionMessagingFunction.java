@@ -23,6 +23,7 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
 
@@ -38,7 +39,7 @@ public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements 
     private Tuple3<Long, K, Message> outValue;
     private Collector<Tuple3<Long, K, Message>> collector;
     private Map<K, Long> partitionMap;
-    protected HashSet<PCVertex<K, VV, EV>> sourcePartition;
+    protected ArrayList<PCVertex<K, VV, EV>> sourcePartition;
     protected Long partitionId;
     protected int currentStep;
 
@@ -72,7 +73,7 @@ public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements 
         this.collector = collector;
     }
 
-    public void setSourcePartition(HashSet<PCVertex<K, VV, EV>> sourcePartition) {
+    public void setSourcePartition(ArrayList<PCVertex<K, VV, EV>> sourcePartition) {
         this.sourcePartition = sourcePartition;
     }
 
