@@ -1,9 +1,6 @@
 package org.apache.flink.graph.partition.centric;
 
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.RichCoGroupFunction;
-import org.apache.flink.api.common.functions.RichFlatMapFunction;
-import org.apache.flink.api.common.functions.RichMapPartitionFunction;
+import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
@@ -66,6 +63,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         if (this.initialVertices == null) {
             throw new RuntimeException("Initial vertices not set");
         }
+        TypeInformation<K> keyType = ((TupleTypeInfo<?>) initialVertices.getType()).getTypeAt(0);
 
         // Partition the graph and assign each partition a unique id
         DataSet<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> partitions =
@@ -73,20 +71,13 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                         new GraphPartitionFunction<K, VV, EV>())
                 );
 
-        // Assign pid to the vertices
-        DataSet<PCVertex<K, VV, EV>> verticesWithPid = partitions.flatMap(
-                new AssignPartitionIdFunction<>(initialVertices.getType())
-        );
-
-        List<Tuple2<K, Long>> tmp;
+        // Build a partition map, we need this to detect a vertex is in the same partition or not
         HashMap<K, Long> partitionMap = new HashMap<>();
         try {
-            tmp = verticesWithPid.map(new MapFunction<PCVertex<K,VV,EV>, Tuple2<K, Long>>() {
-                @Override
-                public Tuple2<K, Long> map(PCVertex<K, VV, EV> value) throws Exception {
-                    return new Tuple2<>(value.getId(), value.getPartitionId());
-                }
-            }).collect();
+            TypeInformation<Tuple2<K, Long>> resultType =
+                    new TupleTypeInfo<>(keyType, BasicTypeInfo.LONG_TYPE_INFO);
+                        List<Tuple2<K, Long>> tmp =
+                    partitions.flatMap(new PartitionMapFunction<K, VV, EV>(resultType)).collect();
             for(Tuple2<K, Long> item: tmp) {
                 partitionMap.put(item.f0, item.f1);
             }
@@ -100,7 +91,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         iteration.name("Partition-centric iteration (" + updateFunction + " | " + messagingFunction + ")");
 
         // Build the messages to pass to each partitions
-        TypeInformation<K> keyType = ((TupleTypeInfo<?>) initialVertices.getType()).getTypeAt(0);
         TypeInformation<Tuple3<Long, K, Message>> messageTypeInfo =
                 new TupleTypeInfo<>(BasicTypeInfo.LONG_TYPE_INFO, keyType, messageType);
         FlatMapOperator<?, Tuple3<Long, K, Message>> messages =
@@ -144,7 +134,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         @Override
         public void flatMap(Tuple2<Long, HashSet<PCVertex<K, VV, EV>>> value, Collector<PCVertex<K, VV, EV>> out) throws Exception {
             for(PCVertex<K, VV, EV> v: value.f1) {
-                v.setPartitionId(value.f0);
                 out.collect(v);
             }
         }
@@ -174,37 +163,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                 partition.add(item);
             }
             out.collect(partition);
-        }
-    }
-
-    /**
-     * Assign each partition id to a vertices
-     *
-     * @param <K>
-     * @param <VV>
-     * @param <EV>
-     */
-    private static class AssignPartitionIdFunction<K, VV, EV> extends
-            RichFlatMapFunction<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>, PCVertex<K, VV, EV>> implements
-            ResultTypeQueryable<PCVertex<K, VV, EV>> {
-        private final TypeInformation<PCVertex<K, VV, EV>> resultType;
-
-        private AssignPartitionIdFunction(TypeInformation<PCVertex<K, VV, EV>> resultType) {
-            this.resultType = resultType;
-        }
-
-
-        @Override
-        public void flatMap(Tuple2<Long, HashSet<PCVertex<K, VV, EV>>> value, Collector<PCVertex<K, VV, EV>> out) throws Exception {
-            for(PCVertex<K, VV, EV> vertex: value.f1) {
-                vertex.setPartitionId(value.f0);
-                out.collect(vertex);
-            }
-        }
-
-        @Override
-        public TypeInformation<PCVertex<K, VV, EV>> getProducedType() {
-            return this.resultType;
         }
     }
 
@@ -298,6 +256,35 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
         @Override
         public TypeInformation<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> getProducedType() {
+            return resultType;
+        }
+    }
+
+    /**
+     * Assign the partition id to each vertex
+     * @param <K>
+     * @param <VV>
+     * @param <EV>
+     */
+    private static class PartitionMapFunction<K, VV, EV> extends
+            RichFlatMapFunction<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>, Tuple2<K, Long>> implements
+            ResultTypeQueryable<Tuple2<K, Long>> {
+
+        private transient TypeInformation<Tuple2<K, Long>> resultType;
+
+        public PartitionMapFunction(TypeInformation<Tuple2<K, Long>> resultType) {
+            this.resultType = resultType;
+        }
+
+        @Override
+        public void flatMap(Tuple2<Long, HashSet<PCVertex<K, VV, EV>>> value, Collector<Tuple2<K, Long>> out) throws Exception {
+            for(PCVertex<K, VV, EV> vertex: value.f1) {
+                out.collect(new Tuple2<>(vertex.getId(), value.f0));
+            }
+        }
+
+        @Override
+        public TypeInformation<Tuple2<K, Long>> getProducedType() {
             return resultType;
         }
     }

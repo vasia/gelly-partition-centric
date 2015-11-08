@@ -15,7 +15,6 @@ import java.util.HashMap;
  */
 public class PCVertex<K, VV, EV> extends Tuple3<K, VV, HashMap<K, EV>> {
     private static final long serialVersionUID = 1L;
-    private Long partitionId;
 
     public PCVertex() {
         this.f2 = new HashMap<>();
@@ -59,11 +58,4 @@ public class PCVertex<K, VV, EV> extends Tuple3<K, VV, HashMap<K, EV>> {
         return f2.remove(target);
     }
 
-    public Long getPartitionId() {
-        return partitionId;
-    }
-
-    public void setPartitionId(Long partitionId) {
-        this.partitionId = partitionId;
-    }
 }
