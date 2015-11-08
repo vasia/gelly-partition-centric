@@ -44,9 +44,12 @@ public class PartitionCentricConnectedComponent {
                 new Vertex<>(2, 2),
                 new Vertex<>(3, 3),
                 new Vertex<>(4, 4),
+
                 new Vertex<>(5, 5),
                 new Vertex<>(6, 6),
                 new Vertex<>(7, 7),
+                new Vertex<>(10, 10),
+
                 new Vertex<>(8, 8),
                 new Vertex<>(9, 9)
         );
@@ -59,6 +62,7 @@ public class PartitionCentricConnectedComponent {
                 new Edge<>(1, 3, 1),
                 new Edge<>(3, 4, 1),
                 new Edge<>(4, 3, 1),
+
                 new Edge<>(5, 6, 1),
                 new Edge<>(6, 5, 1),
                 new Edge<>(6, 7, 1),
@@ -95,9 +99,14 @@ public class PartitionCentricConnectedComponent {
         public void updatePartition(
                 Iterable<PCVertex<Integer, Integer, Integer>> vertices,
                 Iterable<Tuple3<Long, Integer, Integer>> inMessages) throws Exception {
-            Map<Integer, Integer> messageMap = new HashMap<>();
+            Map<Integer, Set<Integer>> messageMap = new HashMap<>();
             for(Tuple3<Long, Integer, Integer> message: inMessages) {
-                messageMap.put(message.f1, message.f2);
+                LOG.debug("Partition {}, receiveing message {} to vertex {}",
+                        partitionId, message.f2, message.f1);
+                if (!messageMap.containsKey(message.f1)) {
+                    messageMap.put(message.f1, new HashSet<Integer>());
+                }
+                messageMap.get(message.f1).add(message.f2);
             }
 
             boolean updatedVertex = false;
@@ -105,10 +114,15 @@ public class PartitionCentricConnectedComponent {
             for(PCVertex<Integer, Integer, Integer> vertex: vertices) {
                 // We have a message incoming
                 if (messageMap.containsKey(vertex.getId())) {
-                    int messageValue = messageMap.get(vertex.getId());
-                    if (messageValue < vertex.getValue()) {
-                        vertex.setValue(messageValue);
-                        updatedVertex = true;
+                    Set<Integer> messages = messageMap.get(vertex.getId());
+                    for(Integer messageValue: messages) {
+                        LOG.debug("Partition {}, deliver message {} to vertex ({}, {})",
+                                partitionId, messageValue, vertex.getId(), vertex.getValue());
+                        if (messageValue < vertex.getValue()) {
+                            vertex.setValue(messageValue);
+                            LOG.debug("Set vertex {} to {}", vertex.getId(), messageValue);
+                            updatedVertex = true;
+                        }
                     }
                 }
             }
