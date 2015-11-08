@@ -51,4 +51,16 @@ public class PCGraph<K, VV, EV> {
         );
         return new PCGraph<>(pcVertices);
     }
+
+    public<Message> PCGraph<K, VV, EV> runPartitionCentricIteration(
+            PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
+            PartitionMessagingFunction<K, VV, Message, EV> messagingFunction,
+            int maximumNumOperations) {
+        PartitionCentricIteration<K, VV, Message, EV> iteration = new PartitionCentricIteration<>(
+                updateFunction, messagingFunction, maximumNumOperations);
+
+        DataSet<PCVertex<K, VV, EV>> updatedVertices = vertices.runOperation(iteration);
+
+        return new PCGraph<>(updatedVertices);
+    }
 }
