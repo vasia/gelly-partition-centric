@@ -25,6 +25,8 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Represent a partition centric graph.
@@ -34,6 +36,7 @@ import org.apache.flink.util.Collector;
  * @param <EV> The type of an edge's value
  */
 public class PCGraph<K, VV, EV> {
+    private static final Logger LOG = LoggerFactory.getLogger(PCGraph.class);
 
     private final DataSet<PCVertex<K, VV, EV>> vertices;
 

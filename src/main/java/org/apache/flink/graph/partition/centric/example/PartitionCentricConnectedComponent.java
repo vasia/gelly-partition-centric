@@ -20,7 +20,6 @@
 package org.apache.flink.graph.partition.centric.example;
 
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
@@ -29,6 +28,8 @@ import org.apache.flink.graph.partition.centric.PCGraph;
 import org.apache.flink.graph.partition.centric.PCVertex;
 import org.apache.flink.graph.partition.centric.PartitionMessagingFunction;
 import org.apache.flink.graph.partition.centric.PartitionUpdateFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -88,6 +89,7 @@ public class PartitionCentricConnectedComponent {
      */
     public static class CCPartitionUpdateFunction extends PartitionUpdateFunction<Integer, Integer, Integer, Integer> {
         private static final long serialVersionUID = 1L;
+        private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
 
         @Override
         public void updatePartition(
@@ -133,6 +135,7 @@ public class PartitionCentricConnectedComponent {
                         if (item.getValue() > top.getValue()) {
                             pq.remove(item);
                             item.setValue(top.getValue());
+                            LOG.debug("Internal: Set vertex {} to {}", item.getId(), top.getValue());
                             pq.add(item);
                             updatedVertex = true;
                         }
@@ -141,6 +144,7 @@ public class PartitionCentricConnectedComponent {
             }
 
             if (updatedVertex) {
+                LOG.debug("Updating partition {}", partitionId);
                 updatePartition(verticesMap.values());
             }
         }

@@ -35,6 +35,8 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.api.java.utils.DataSetUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Collector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,6 +53,8 @@ import java.util.List;
  */
 public class PartitionCentricIteration<K, VV, Message, EV> implements
         CustomUnaryOperation<PCVertex<K, VV, EV>, PCVertex<K, VV, EV>> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PartitionCentricIteration.class);
 
     private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
 
@@ -112,14 +116,16 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         // Build the messages to pass to each partitions
         TypeInformation<Tuple3<Long, K, Message>> messageTypeInfo =
                 new TupleTypeInfo<>(BasicTypeInfo.LONG_TYPE_INFO, keyType, messageType);
+        MessagingUdf<K, VV, Message, EV> messenger = new MessagingUdf<>(messagingFunction, partitionMap, messageTypeInfo);
         FlatMapOperator<?, Tuple3<Long, K, Message>> messages =
-                iteration.getWorkset().flatMap(new MessagingUdf<>(messagingFunction, partitionMap, messageTypeInfo));
+                iteration.getWorkset().flatMap(messenger);
 
         // Deliver the messages to the partitions
+        UpdateUdf<K, VV, EV, Message> updater = new UpdateUdf<>(updateFunction, partitions.getType());
         CoGroupOperator<?, ?, Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> updates =
                 messages.coGroup(iteration.getSolutionSet())
                         .where(0).equalTo(0)
-                        .with(new UpdateUdf<>(updateFunction, partitions.getType()));
+                        .with(updater);
 
         // Finish iteration
         DataSet<Tuple2<Long, HashSet<PCVertex<K, VV, EV>>>> result =
@@ -260,6 +266,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         @Override
         public void open(Configuration parameters) throws Exception {
             this.updateFunction.setCurrentStep(getIterationRuntimeContext().getSuperstepNumber());
+            LOG.debug("Starting update iteration {}", getIterationRuntimeContext().getSuperstepNumber());
         }
 
         @Override
