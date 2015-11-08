@@ -30,3 +30,7 @@ hs_err_pid*
 ## Plugin-specific files:
 # IntelliJ
 out/
+
+#Logging
+log4j.properties
+logs/
