@@ -19,11 +19,13 @@
 
 package org.apache.flink.graph.partition.centric;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 
@@ -36,12 +38,10 @@ import java.util.Map;
  */
 public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
-    private Tuple3<Long, K, Message> outValue;
-    private Collector<Tuple3<Long, K, Message>> collector;
-    private Map<K, Long> partitionMap;
-    protected ArrayList<PCVertex<K, VV, EV>> sourcePartition;
-    protected Long partitionId;
+    private Tuple2<K, Message> outValue;
+    private Collector<Tuple2<K, Message>> collector;
     protected int currentStep;
+    protected PCVertex<K, VV, EV> sourceVertex;
 
     /**
      * Implement this method to send message.
@@ -49,9 +49,8 @@ public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements 
      */
     public abstract void sendMessages();
 
-    public void init(Map<K, Long> partitionMap) {
-        this.partitionMap = partitionMap;
-        this.outValue = new Tuple3<>();
+    public void init() {
+        this.outValue = new Tuple2<>();
     }
 
     /**
@@ -63,36 +62,21 @@ public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements 
      * @param m The message.
      */
     public void sendMessageTo(K target, Message m) {
-        outValue.f0 = partitionMap.get(target);
-        outValue.f1 = target;
-        outValue.f2 = m;
+        outValue.f0 = target;
+        outValue.f1 = m;
         collector.collect(outValue);
     }
 
-    public void setCollector(Collector<Tuple3<Long, K, Message>> collector) {
+    public void setCollector(Collector<Tuple2<K, Message>> collector) {
         this.collector = collector;
     }
 
-    public void setSourcePartition(ArrayList<PCVertex<K, VV, EV>> sourcePartition) {
-        this.sourcePartition = sourcePartition;
+    public void setSourceVertex(PCVertex<K, VV, EV> sourceVertex) {
+        this.sourceVertex = sourceVertex;
     }
 
     public void setCurrentStep(int currentStep) {
         this.currentStep = currentStep;
     }
 
-    /**
-     * Check if the target is in the same partition with the source vertex.
-     * A vertex should not send message to another vertex of the same partition.
-     *
-     * @param target The id of target vertex.
-     * @return true if the target is in the same partition as the source vertex
-     */
-    public boolean isSamePartition(K target) {
-        return partitionId.equals(partitionMap.get(target));
-    }
-
-    public void setPartitionId(Long partitionId) {
-        this.partitionId = partitionId;
-    }
 }

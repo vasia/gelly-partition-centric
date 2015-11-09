@@ -20,7 +20,7 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.slf4j.Logger;
@@ -59,40 +59,24 @@ public class PCConnectedComponents<K, EV> implements
     /**
      * Partition update function
      */
-    public static final class CCPartitionUpdateFunction<K, EV> extends PartitionUpdateFunction<K, Long, Long, EV> {
+    public static final class CCPartitionUpdateFunction<K, EV> extends
+            PartitionUpdateFunction<K, Long, Long, EV> {
         private static final long serialVersionUID = 1L;
         private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
 
         @Override
-        public void updatePartition(
-                Iterable<PCVertex<K, Long, EV>> vertices,
-                Iterable<Tuple3<Long, K, Long>> inMessages) throws Exception {
-            Map<K, Set<Long>> messageMap = new HashMap<>();
-            for(Tuple3<Long, K, Long> message: inMessages) {
-                LOG.debug("Partition {}, receiveing message {} to vertex {}",
-                        partitionId, message.f2, message.f1);
-                if (!messageMap.containsKey(message.f1)) {
-                    messageMap.put(message.f1, new HashSet<Long>());
-                }
-                messageMap.get(message.f1).add(message.f2);
-            }
-
-            boolean updatedVertex = false;
-
-            for(PCVertex<K, Long, EV> vertex: vertices) {
-                // We have a message incoming
-                if (messageMap.containsKey(vertex.getId())) {
-                    Set<Long> messages = messageMap.get(vertex.getId());
-                    for(Long messageValue: messages) {
-                        LOG.debug("Partition {}, deliver message {} to vertex ({}, {})",
-                                partitionId, messageValue, vertex.getId(), vertex.getValue());
-                        if (messageValue < vertex.getValue()) {
-                            vertex.setValue(messageValue);
-                            LOG.debug("Set vertex {} to {}", vertex.getId(), messageValue);
-                            updatedVertex = true;
-                        }
+        public void updateVertex(Iterable<Tuple2<PCVertex<K, Long, EV>, ArrayList<Long>>> v) throws Exception {
+            ArrayList<PCVertex<K, Long, EV>> vertices = new ArrayList<>();
+            Set<PCVertex<K, Long, EV>> updated = new HashSet<>();
+            for (Tuple2<PCVertex<K, Long, EV>, ArrayList<Long>> pair : v) {
+                PCVertex<K, Long, EV> vertex = pair.f0;
+                for (Long message : pair.f1) {
+                    if (vertex.getValue() > message) {
+                        vertex.setValue(message);
+                        updated.add(vertex);
                     }
                 }
+                vertices.add(vertex);
             }
 
             // Run connected component on the partition
@@ -102,33 +86,33 @@ public class PCConnectedComponents<K, EV> implements
                         public int compare(PCVertex<K, Long, EV> o1, PCVertex<K, Long, EV> o2) {
                             return o1.getValue().compareTo(o2.getValue());
                         }
-            });
+                    });
 
             // Update priority queue to min value
             Map<K, PCVertex<K, Long, EV>> verticesMap = new HashMap<>();
-            for(PCVertex<K, Long, EV> vertex: vertices) {
+            for (PCVertex<K, Long, EV> vertex : vertices) {
                 pq.add(vertex);
                 verticesMap.put(vertex.getId(), vertex);
             }
             while (!pq.isEmpty()) {
                 PCVertex<K, Long, EV> top = pq.poll();
-                for(Map.Entry<K, EV> edge: top.getEdges().entrySet()) {
+                for (Map.Entry<K, EV> edge : top.getEdges().entrySet()) {
                     if (verticesMap.containsKey(edge.getKey())) {
                         PCVertex<K, Long, EV> item = verticesMap.get(edge.getKey());
                         if (item.getValue() > top.getValue()) {
                             pq.remove(item);
                             item.setValue(top.getValue());
+                            updated.add(item);
                             LOG.debug("Internal: Set vertex {} to {}", item.getId(), top.getValue());
                             pq.add(item);
-                            updatedVertex = true;
                         }
                     }
                 }
             }
 
-            if (updatedVertex) {
-                LOG.debug("Updating partition {}", partitionId);
-                updatePartition(verticesMap.values());
+            // Mark the vertex as updated
+            for (PCVertex<K, Long, EV> vertex : updated) {
+                updateVertex(vertex);
             }
         }
     }
@@ -141,14 +125,10 @@ public class PCConnectedComponents<K, EV> implements
 
         @Override
         public void sendMessages() {
-            for(PCVertex<K, Long, EV> sourceVertex: sourcePartition) {
-                HashMap<K, EV> outGoing = sourceVertex.getEdges();
-                for(Map.Entry<K, EV> edge: outGoing.entrySet()) {
-                    // Only send message when the the vertex is in a different partition
-                    if (!isSamePartition(edge.getKey())) {
-                        sendMessageTo(edge.getKey(), sourceVertex.getValue());
-                    }
-                }
+            // Run connected component on the partition
+            for (Map.Entry<K, EV> edge : sourceVertex.getEdges().entrySet()) {
+                // External vertices, send message to update
+                sendMessageTo(edge.getKey(), sourceVertex.getValue());
             }
         }
     }

@@ -21,13 +21,10 @@ package org.apache.flink.graph.partition.centric;
 
 
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
 
 /**
  * Users need to subclass this class and implement their partition processing method
@@ -40,19 +37,14 @@ import java.util.HashSet;
 public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
     protected int currentStep;
-    protected Long partitionId;
-    protected Collector<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> collector;
+    protected Collector<PCVertex<K, VV, EV>> collector;
     protected boolean updated;
 
     public void setCurrentStep(int currentStep) {
         this.currentStep = currentStep;
     }
 
-    public void setPartitionId(Long partitionId) {
-        this.partitionId = partitionId;
-    }
-
-    public void setCollector(Collector<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> collector) {
+    public void setCollector(Collector<PCVertex<K, VV, EV>> collector) {
         this.collector = collector;
     }
 
@@ -61,25 +53,20 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
     }
 
     /**
-     * Call this once to update the partition value
+     * Call this to update a vertex
      *
-     * @param updatedValue The list of vertices inside the partition
+     * @param vertex
      */
-    protected void updatePartition(Collection<PCVertex<K, VV, EV>> updatedValue) {
-        // Only need to collect the partition once.
-        if (!updated) {
-            updated = true;
-            collector.collect(new Tuple2<>(partitionId, new ArrayList<>(updatedValue)));
-        }
+    protected void updateVertex(PCVertex<K, VV, EV> vertex) {
+        collector.collect(vertex);
     }
 
     /**
      * Call this function to process the partition.
-     * If the partition is updated, call updatePartition with the new collection of vertices
+     * If the partition is updated, call updateVertex with the new collection of vertices
      *
-     * @param vertices The vertices of the partition
      * @param inMessages The messages to the vertices of the partition
      * @throws Exception
      */
-    public abstract void updatePartition(Iterable<PCVertex<K, VV, EV>> vertices, Iterable<Tuple3<Long, K, Message>> inMessages) throws Exception;
+    public abstract void updateVertex(Iterable<Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> inMessages) throws Exception;
 }

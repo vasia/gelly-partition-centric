@@ -20,19 +20,13 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.functions.*;
-import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.operators.CoGroupOperator;
-import org.apache.flink.api.java.operators.CustomUnaryOperation;
-import org.apache.flink.api.java.operators.DeltaIteration;
-import org.apache.flink.api.java.operators.FlatMapOperator;
+import org.apache.flink.api.java.operators.*;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
-import org.apache.flink.api.java.utils.DataSetUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
@@ -83,53 +77,49 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         if (this.initialVertices == null) {
             throw new RuntimeException("Initial vertices not set");
         }
-        TypeInformation<K> keyType = ((TupleTypeInfo<?>) initialVertices.getType()).getTypeAt(0);
-
-        // Partition the graph and assign each partition a unique id
-        DataSet<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> partitions =
-                DataSetUtils.zipWithUniqueId(initialVertices.mapPartition(
-                        new GraphPartitionFunction<K, VV, EV>())
-                );
-
-        // Build a partition map, we need this to detect a vertex is in the same partition or not
-        HashMap<K, Long> partitionMap = new HashMap<>();
-        try {
-            TypeInformation<Tuple2<K, Long>> resultType =
-                    new TupleTypeInfo<>(keyType, BasicTypeInfo.LONG_TYPE_INFO);
-                        List<Tuple2<K, Long>> tmp =
-                    partitions.flatMap(new PartitionMapFunction<K, VV, EV>(resultType)).collect();
-            for(Tuple2<K, Long> item: tmp) {
-                partitionMap.put(item.f0, item.f1);
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Unable to build vertex partition mapping", e);
-        }
+        TypeInformation<PCVertex<K, VV, EV>> vertexType = initialVertices.getType();
+        TypeInformation<K> keyType = ((TupleTypeInfo<?>) vertexType).getTypeAt(0);
 
         // Start the iteration
-        DeltaIteration<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>, Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> iteration =
-                partitions.iterateDelta(partitions, maxIteration, 0);
+        DeltaIteration<PCVertex<K, VV, EV>, PCVertex<K, VV, EV>> iteration =
+                initialVertices.iterateDelta(initialVertices, maxIteration, 0);
         iteration.name("Partition-centric iteration (" + updateFunction + " | " + messagingFunction + ")");
 
-        // Build the messages to pass to each partitions
-        TypeInformation<Tuple3<Long, K, Message>> messageTypeInfo =
-                new TupleTypeInfo<>(BasicTypeInfo.LONG_TYPE_INFO, keyType, messageType);
-        MessagingUdf<K, VV, Message, EV> messenger = new MessagingUdf<>(messagingFunction, partitionMap, messageTypeInfo);
-        FlatMapOperator<?, Tuple3<Long, K, Message>> messages =
+        // Build the messages to pass to each vertex
+        TypeInformation<Tuple2<K, Message>> messageTypeInfo = new TupleTypeInfo<>(keyType, messageType);
+        MessagingUdf<K, VV, Message, EV> messenger = new MessagingUdf<>(messagingFunction, messageTypeInfo);
+        FlatMapOperator<?, Tuple2<K, Message>> messages =
                 iteration.getWorkset().flatMap(messenger);
 
         // Deliver the messages to the partitions
-        UpdateUdf<K, VV, EV, Message> updater = new UpdateUdf<>(updateFunction, partitions.getType());
-        CoGroupOperator<?, ?, Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> updates =
-                messages.coGroup(iteration.getSolutionSet())
-                        .where(0).equalTo(0)
-                        .with(updater);
+        CoGroupOperator<?, ?, Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> mailMan =
+                messages.coGroup(iteration.getSolutionSet()).where(0).equalTo(0).with(new RichCoGroupFunction<Tuple2<K, Message>, PCVertex<K, VV, EV>, Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>>() {
+            @Override
+            public void coGroup(Iterable<Tuple2<K, Message>> first, Iterable<PCVertex<K, VV, EV>> second, Collector<Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> out) throws Exception {
+                Iterator<PCVertex<K, VV, EV>> vertexIterator = second.iterator();
+                if (vertexIterator.hasNext()) {
+                    ArrayList<Message> inbox = new ArrayList<Message>();
+                    for (Tuple2<K, Message> message : first) {
+                        inbox.add(message.f1);
+                    }
+                    Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>> ret =
+                            new Tuple2<>(vertexIterator.next(), inbox);
+                    out.collect(ret);
+                } else {
+                    throw new RuntimeException("Invalid vertex");
+                }
+            }
+        });
+
+        UpdateUdf<K, VV, EV, Message> updater = new UpdateUdf<>(updateFunction, initialVertices.getType());
+        MapPartitionOperator<?, PCVertex<K, VV, EV>> updates =
+                mailMan.mapPartition(updater);
 
         // Finish iteration
-        DataSet<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> result =
-                iteration.closeWith(updates, updates);
+        DataSet<PCVertex<K, VV, EV>> result = iteration.closeWith(updates, updates);
 
         // Convert the data set of partitions back to the data set of vertices
-        return result.flatMap(new GraphUnpartitionFunction<>(initialVertices.getType()));
+        return result;
     }
 
     private TypeInformation<Message> getMessageType(PartitionMessagingFunction<K, VV, Message, EV> mf) {
@@ -197,20 +187,17 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      * @param <EV>
      */
     private static class MessagingUdf<K, VV, Message, EV> extends
-            RichFlatMapFunction<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>, Tuple3<Long, K, Message>> implements
-            ResultTypeQueryable<Tuple3<Long, K, Message>> {
+            RichFlatMapFunction<PCVertex<K, VV, EV>, Tuple2<K, Message>> implements
+            ResultTypeQueryable<Tuple2<K, Message>> {
         private static final long serialVersionUID = 1L;
 
         final PartitionMessagingFunction<K, VV, Message, EV> messagingFunction;
-        final HashMap<K, Long> partitionMap;
 
-        private transient TypeInformation<Tuple3<Long, K, Message>> messageType;
+        private transient TypeInformation<Tuple2<K, Message>> messageType;
 
         public MessagingUdf(PartitionMessagingFunction<K, VV, Message, EV> messagingFunction,
-                            HashMap<K, Long> partitionMap,
-                            TypeInformation<Tuple3<Long, K, Message>> messageTypeInfo) {
+                            TypeInformation<Tuple2<K, Message>> messageTypeInfo) {
             this.messagingFunction = messagingFunction;
-            this.partitionMap = partitionMap;
             this.messageType = messageTypeInfo;
         }
 
@@ -218,21 +205,20 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         public void open(Configuration parameters) throws Exception {
             int currentStep = getIterationRuntimeContext().getSuperstepNumber();
             if (currentStep == 1) {
-                this.messagingFunction.init(partitionMap);
+                this.messagingFunction.init();
             }
             this.messagingFunction.setCurrentStep(currentStep);
         }
 
         @Override
-        public TypeInformation<Tuple3<Long, K, Message>> getProducedType() {
+        public TypeInformation<Tuple2<K, Message>> getProducedType() {
             return this.messageType;
         }
 
         @Override
-        public void flatMap(Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>> value, Collector<Tuple3<Long, K, Message>> out) throws Exception {
+        public void flatMap(PCVertex<K, VV, EV> value, Collector<Tuple2<K, Message>> out) throws Exception {
             messagingFunction.setCollector(out);
-            messagingFunction.setSourcePartition(value.f1);
-            messagingFunction.setPartitionId(value.f0);
+            messagingFunction.setSourceVertex(value);
             messagingFunction.sendMessages();
         }
     }
@@ -245,17 +231,16 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      * @param <EV>
      * @param <Message>
      */
-    private static class UpdateUdf<K, VV, EV, Message> extends RichCoGroupFunction<
-            Tuple3<Long, K, Message>,
-            Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>,
-            Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> implements
-            ResultTypeQueryable<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> {
+    private static class UpdateUdf<K, VV, EV, Message> extends RichMapPartitionFunction<
+            Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>,
+            PCVertex<K, VV, EV>> implements
+            ResultTypeQueryable<PCVertex<K, VV, EV>> {
         private static final long serialVersionUID = 1L;
 
         private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
-        private transient TypeInformation<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> resultType;
+        private transient TypeInformation<PCVertex<K, VV, EV>> resultType;
 
-        private UpdateUdf(PartitionUpdateFunction<K, VV, Message, EV> updateFunction, TypeInformation<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> resultType) {
+        private UpdateUdf(PartitionUpdateFunction<K, VV, Message, EV> updateFunction, TypeInformation<PCVertex<K, VV, EV>> resultType) {
             this.updateFunction = updateFunction;
             this.resultType = resultType;
         }
@@ -267,24 +252,15 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
 
         @Override
-        public void coGroup(Iterable<Tuple3<Long, K, Message>> first,
-                            Iterable<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> second,
-                            Collector<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> out) throws Exception {
-            Iterator<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> partitionIter = second.iterator();
-            if (partitionIter.hasNext()) {
-                Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>> partition = partitionIter.next();
-                updateFunction.setUpdated(false);
-                updateFunction.setPartitionId(partition.f0);
-                updateFunction.setCollector(out);
-                updateFunction.updatePartition(partition.f1, first);
-            } else {
-                throw new Exception("Invalid partition id");
-            }
+        public TypeInformation<PCVertex<K, VV, EV>> getProducedType() {
+            return resultType;
         }
 
         @Override
-        public TypeInformation<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>> getProducedType() {
-            return resultType;
+        public void mapPartition(Iterable<Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> values, Collector<PCVertex<K, VV, EV>> out) throws Exception {
+            updateFunction.setCollector(out);
+            updateFunction.updateVertex(values);
+
         }
     }
 
