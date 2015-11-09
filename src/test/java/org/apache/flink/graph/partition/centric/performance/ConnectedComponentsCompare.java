@@ -17,27 +17,29 @@
  * under the License.
  */
 
-package org.apache.flink.graph.partition.centric;
+package org.apache.flink.graph.partition.centric.performance;
 
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Graph;
+import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.library.ConnectedComponents;
+import org.apache.flink.graph.partition.centric.PCConnectedComponents;
+import org.apache.flink.graph.partition.centric.PCVertex;
 import org.apache.flink.graph.partition.centric.utils.GraphGenerator;
 import org.apache.flink.test.testdata.ConnectedComponentsData;
-import org.junit.Test;
 
 import java.util.List;
 
 /**
- * Automated test for connected components algorithm
- *
+ * Compare performance between vertex centric and partition centric implementation
+ * of ConnectedComponents algorithm
  */
-public class PCConnectedComponentsTest {
+public class ConnectedComponentsCompare {
 
-    @Test
-    public void testRun() throws Exception {
-        int verticesCount = 5000;
+    public static void main(String[] args) throws Exception {
+        int verticesCount = 1000;
         int edgesCount = verticesCount * 2;
 
         ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
@@ -45,16 +47,28 @@ public class PCConnectedComponentsTest {
 
         Graph<Long, Long, Long> graph = GraphGenerator.generateGraph(verticesCount, edgesCount, environment);
 
+        long start1 = System.currentTimeMillis();
         PCConnectedComponents<Long, Long> algo = new PCConnectedComponents<>(verticesCount);
-
         List<Tuple2<Long, Long>> result = algo.run(graph).map(
                 new RichMapFunction<PCVertex<Long, Long, Long>, Tuple2<Long, Long>>() {
                     @Override
                     public Tuple2<Long, Long> map(PCVertex<Long, Long, Long> value) throws Exception {
                         return new Tuple2<>(value.getId(), value.getValue());
                     }
-        }).collect();
-
+                }).collect();
         ConnectedComponentsData.checkOddEvenResult(result);
+        System.out.printf("Partition centric: %d ms%n", System.currentTimeMillis() - start1);
+
+        long start2 = System.currentTimeMillis();
+        ConnectedComponents<Long, Long> vcAlgo = new ConnectedComponents<>(verticesCount);
+        List<Tuple2<Long, Long>> result2 = vcAlgo.run(graph).map(
+                new RichMapFunction<Vertex<Long, Long>, Tuple2<Long, Long>>() {
+                    @Override
+                    public Tuple2<Long, Long> map(Vertex<Long, Long> value) throws Exception {
+                        return new Tuple2<>(value.getId(), value.getValue());
+                    }
+                }).collect();
+        ConnectedComponentsData.checkOddEvenResult(result2);
+        System.out.printf("Vertex centric: %d ms%n", System.currentTimeMillis() - start2);
     }
 }
