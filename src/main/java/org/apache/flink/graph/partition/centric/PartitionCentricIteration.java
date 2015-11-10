@@ -91,91 +91,23 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         FlatMapOperator<?, Tuple2<K, Message>> messages =
                 iteration.getWorkset().flatMap(messenger);
 
-        // Deliver the messages to the partitions
-        CoGroupOperator<?, ?, Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> mailMan =
-                messages.coGroup(iteration.getSolutionSet()).where(0).equalTo(0).with(new RichCoGroupFunction<Tuple2<K, Message>, PCVertex<K, VV, EV>, Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>>() {
-            @Override
-            public void coGroup(Iterable<Tuple2<K, Message>> first, Iterable<PCVertex<K, VV, EV>> second, Collector<Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> out) throws Exception {
-                Iterator<PCVertex<K, VV, EV>> vertexIterator = second.iterator();
-                if (vertexIterator.hasNext()) {
-                    ArrayList<Message> inbox = new ArrayList<Message>();
-                    for (Tuple2<K, Message> message : first) {
-                        inbox.add(message.f1);
-                    }
-                    Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>> ret =
-                            new Tuple2<>(vertexIterator.next(), inbox);
-                    out.collect(ret);
-                } else {
-                    throw new RuntimeException("Invalid vertex");
-                }
-            }
-        });
+        // Deliver the messages to each vertex
+        CoGroupOperator<?, ?, Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> deliverer =
+                messages.coGroup(iteration.getSolutionSet())
+                        .where(0).equalTo(0)
+                        .with(new MessageDeliverer<K, Message, VV, EV>());
 
+        // Update the partition
         UpdateUdf<K, VV, EV, Message> updater = new UpdateUdf<>(updateFunction, initialVertices.getType());
         MapPartitionOperator<?, PCVertex<K, VV, EV>> updates =
-                mailMan.mapPartition(updater);
+                deliverer.mapPartition(updater);
 
         // Finish iteration
-        DataSet<PCVertex<K, VV, EV>> result = iteration.closeWith(updates, updates);
-
-        // Convert the data set of partitions back to the data set of vertices
-        return result;
+        return iteration.closeWith(updates, updates);
     }
 
     private TypeInformation<Message> getMessageType(PartitionMessagingFunction<K, VV, Message, EV> mf) {
         return TypeExtractor.createTypeInfo(PartitionMessagingFunction.class, mf.getClass(), 2, null, null);
-    }
-
-    /**
-     * Convert a dataset of partitions to a dataset of vertices
-     * 
-     * @param <K>
-     * @param <VV>
-     * @param <EV>
-     */
-    private static class GraphUnpartitionFunction<K, VV, EV>
-            extends RichFlatMapFunction<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>, PCVertex<K, VV, EV>>
-            implements ResultTypeQueryable<PCVertex<K, VV, EV>> {
-
-        private transient TypeInformation<PCVertex<K, VV, EV>> resultType;
-
-        private GraphUnpartitionFunction(TypeInformation<PCVertex<K, VV, EV>> resultType) {
-            this.resultType = resultType;
-        }
-
-        @Override
-        public void flatMap(Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>> value, Collector<PCVertex<K, VV, EV>> out) throws Exception {
-            for(PCVertex<K, VV, EV> v: value.f1) {
-                out.collect(v);
-            }
-        }
-
-        @Override
-        public TypeInformation<PCVertex<K, VV, EV>> getProducedType() {
-            return resultType;
-        }
-    }
-
-    /**
-     * Collect a dataset of vertices to a dataset of partitions
-     *
-     * @param <K>
-     * @param <VV>
-     * @param <EV>
-     */
-    private static class GraphPartitionFunction<K, VV, EV> extends
-            RichMapPartitionFunction<PCVertex<K, VV, EV>, ArrayList<PCVertex<K, VV, EV>>> {
-
-        @Override
-        public void mapPartition(
-                Iterable<PCVertex<K, VV, EV>> values,
-                Collector<ArrayList<PCVertex<K, VV, EV>>> out) throws Exception {
-            ArrayList<PCVertex<K, VV, EV>> partition = new ArrayList<>();
-            for(PCVertex<K, VV, EV> item: values) {
-                partition.add(item);
-            }
-            out.collect(partition);
-        }
     }
 
     /**
@@ -264,33 +196,25 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
     }
 
-    /**
-     * Assign the partition id to each vertex
-     * @param <K>
-     * @param <VV>
-     * @param <EV>
-     */
-    private static class PartitionMapFunction<K, VV, EV> extends
-            RichFlatMapFunction<Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>>, Tuple2<K, Long>> implements
-            ResultTypeQueryable<Tuple2<K, Long>> {
-        private static final long serialVersionUID = 1L;
-
-        private transient TypeInformation<Tuple2<K, Long>> resultType;
-
-        public PartitionMapFunction(TypeInformation<Tuple2<K, Long>> resultType) {
-            this.resultType = resultType;
-        }
-
+    private static class MessageDeliverer<K, Message, VV, EV> extends
+            RichCoGroupFunction<
+                    Tuple2<K, Message>, PCVertex<K, VV, EV>,
+                    Tuple2<PCVertex<K, VV, EV>,
+                    ArrayList<Message>>> {
         @Override
-        public void flatMap(Tuple2<Long, ArrayList<PCVertex<K, VV, EV>>> value, Collector<Tuple2<K, Long>> out) throws Exception {
-            for(PCVertex<K, VV, EV> vertex: value.f1) {
-                out.collect(new Tuple2<>(vertex.getId(), value.f0));
+        public void coGroup(Iterable<Tuple2<K, Message>> first, Iterable<PCVertex<K, VV, EV>> second, Collector<Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> out) throws Exception {
+            Iterator<PCVertex<K, VV, EV>> vertexIterator = second.iterator();
+            if (vertexIterator.hasNext()) {
+                ArrayList<Message> inbox = new ArrayList<Message>();
+                for (Tuple2<K, Message> message : first) {
+                    inbox.add(message.f1);
+                }
+                Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>> ret =
+                        new Tuple2<>(vertexIterator.next(), inbox);
+                out.collect(ret);
+            } else {
+                throw new RuntimeException("Invalid vertex");
             }
-        }
-
-        @Override
-        public TypeInformation<Tuple2<K, Long>> getProducedType() {
-            return resultType;
         }
     }
 }
