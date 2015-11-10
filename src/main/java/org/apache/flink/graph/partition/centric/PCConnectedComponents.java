@@ -72,6 +72,7 @@ public class PCConnectedComponents<K, EV> implements
                 PCVertex<K, Long, EV> vertex = pair.f0;
                 for (Long message : pair.f1) {
                     if (vertex.getValue() > message) {
+                        LOG.debug("Set {} to {}", vertex.getId(), message);
                         vertex.setValue(message);
                         updated.add(vertex);
                     }
@@ -122,12 +123,14 @@ public class PCConnectedComponents<K, EV> implements
      */
     public static class CCPartitionMessagingFunction<K, EV> extends PartitionMessagingFunction<K, Long, Long, EV> {
         private static final long serialVersionUID = 1L;
+        private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
 
         @Override
         public void sendMessages() {
             // Run connected component on the partition
             for (Map.Entry<K, EV> edge : sourceVertex.getEdges().entrySet()) {
                 // External vertices, send message to update
+                LOG.debug("Sending {} to {}", sourceVertex.getValue(), edge.getKey());
                 sendMessageTo(edge.getKey(), sourceVertex.getValue());
             }
         }
