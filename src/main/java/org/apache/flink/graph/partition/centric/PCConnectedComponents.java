@@ -72,7 +72,6 @@ public class PCConnectedComponents<K, EV> implements
                 PCVertex<K, Long, EV> vertex = pair.f0;
                 for (Long message : pair.f1) {
                     if (vertex.getValue() > message) {
-                        LOG.debug("Set {} to {}", vertex.getId(), message);
                         vertex.setValue(message);
                         updated.add(vertex);
                     }
@@ -104,7 +103,6 @@ public class PCConnectedComponents<K, EV> implements
                             pq.remove(item);
                             item.setValue(top.getValue());
                             updated.add(item);
-                            LOG.debug("Internal: Set vertex {} to {}", item.getId(), top.getValue());
                             pq.add(item);
                         }
                     }
@@ -130,7 +128,6 @@ public class PCConnectedComponents<K, EV> implements
             // Run connected component on the partition
             for (Map.Entry<K, EV> edge : sourceVertex.getEdges().entrySet()) {
                 // External vertices, send message to update
-                LOG.debug("Sending {} to {}", sourceVertex.getValue(), edge.getKey());
                 sendMessageTo(edge.getKey(), sourceVertex.getValue());
             }
         }
