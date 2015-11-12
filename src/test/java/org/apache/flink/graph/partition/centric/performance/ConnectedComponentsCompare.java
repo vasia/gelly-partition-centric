@@ -39,8 +39,8 @@ import java.util.List;
 public class ConnectedComponentsCompare {
 
     public static void main(String[] args) throws Exception {
-        int verticesCount = 1000;
-        int edgesCount = verticesCount * 2;
+        int verticesCount = 40000;
+        int edgesCount = verticesCount * 20;
 
         ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
         environment.getConfig().disableSysoutLogging();
