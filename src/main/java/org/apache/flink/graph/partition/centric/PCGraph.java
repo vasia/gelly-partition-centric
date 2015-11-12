@@ -77,9 +77,10 @@ public class PCGraph<K, VV, EV> {
     public<Message> PCGraph<K, VV, EV> runPartitionCentricIteration(
             PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
             PartitionMessagingFunction<K, VV, Message, EV> messagingFunction,
+            VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
             int maximumNumOperations) {
         PartitionCentricIteration<K, VV, Message, EV> iteration = new PartitionCentricIteration<>(
-                updateFunction, messagingFunction, maximumNumOperations);
+                updateFunction, messagingFunction, vertexUpdateFunction, maximumNumOperations);
 
         DataSet<PCVertex<K, VV, EV>> updatedVertices = vertices.runOperation(iteration);
 

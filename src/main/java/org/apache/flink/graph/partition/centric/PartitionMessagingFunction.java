@@ -22,6 +22,8 @@ package org.apache.flink.graph.partition.centric;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -38,6 +40,8 @@ import java.util.Map;
  */
 public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
+    private static final Logger LOG = LoggerFactory.getLogger(PartitionMessagingFunction.class);
+
     private Tuple2<K, Message> outValue;
     private Collector<Tuple2<K, Message>> collector;
     protected int currentStep;

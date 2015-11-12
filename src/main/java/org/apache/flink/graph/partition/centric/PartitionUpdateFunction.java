@@ -20,11 +20,9 @@
 package org.apache.flink.graph.partition.centric;
 
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 
 /**
  * Users need to subclass this class and implement their partition processing method
@@ -68,5 +66,5 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
      * @param inMessages The messages to the vertices of the partition
      * @throws Exception
      */
-    public abstract void updateVertex(Iterable<Tuple2<PCVertex<K, VV, EV>, ArrayList<Message>>> inMessages) throws Exception;
+    public abstract void updateVertex(Iterable<PCVertex<K, VV, EV>> inMessages) throws Exception;
 }

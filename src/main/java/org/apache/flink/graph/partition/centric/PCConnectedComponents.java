@@ -51,6 +51,7 @@ public class PCConnectedComponents<K, EV> implements
                 pcGraph.runPartitionCentricIteration(
                         new CCPartitionUpdateFunction<K, EV>(),
                         new CCPartitionMessagingFunction<K, EV>(),
+                        new CCMessageAggregator<K, EV>(),
                         maxIteration);
 
         return result.getVertices();
@@ -65,18 +66,11 @@ public class PCConnectedComponents<K, EV> implements
         private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
 
         @Override
-        public void updateVertex(Iterable<Tuple2<PCVertex<K, Long, EV>, ArrayList<Long>>> v) throws Exception {
-            ArrayList<PCVertex<K, Long, EV>> vertices = new ArrayList<>();
+        public void updateVertex(Iterable<PCVertex<K, Long, EV>> v) throws Exception {
             Set<PCVertex<K, Long, EV>> updated = new HashSet<>();
-            for (Tuple2<PCVertex<K, Long, EV>, ArrayList<Long>> pair : v) {
-                PCVertex<K, Long, EV> vertex = pair.f0;
-                for (Long message : pair.f1) {
-                    if (vertex.getValue() > message) {
-                        vertex.setValue(message);
-                        updated.add(vertex);
-                    }
-                }
-                vertices.add(vertex);
+            HashMap<K, PCVertex<K, Long, EV>> partition = new HashMap<>();
+            for (PCVertex<K, Long, EV> vertex : v) {
+                partition.put(vertex.getId(), vertex);
             }
 
             // Run connected component on the partition
@@ -90,7 +84,7 @@ public class PCConnectedComponents<K, EV> implements
 
             // Update priority queue to min value
             Map<K, PCVertex<K, Long, EV>> verticesMap = new HashMap<>();
-            for (PCVertex<K, Long, EV> vertex : vertices) {
+            for (PCVertex<K, Long, EV> vertex : partition.values()) {
                 pq.add(vertex);
                 verticesMap.put(vertex.getId(), vertex);
             }
@@ -110,7 +104,7 @@ public class PCConnectedComponents<K, EV> implements
             }
 
             // Mark the vertex as updated
-            for (PCVertex<K, Long, EV> vertex : updated) {
+            for (PCVertex<K, Long, EV> vertex : partition.values()) {
                 updateVertex(vertex);
             }
         }
@@ -125,11 +119,26 @@ public class PCConnectedComponents<K, EV> implements
 
         @Override
         public void sendMessages() {
-            // Run connected component on the partition
             for (Map.Entry<K, EV> edge : sourceVertex.getEdges().entrySet()) {
-                // External vertices, send message to update
                 sendMessageTo(edge.getKey(), sourceVertex.getValue());
             }
+        }
+    }
+
+    public static class CCMessageAggregator<K, EV> extends VertexUpdateFunction<K, Long, Long, EV> {
+
+        @Override
+        public void updateVertex(Iterable<Tuple2<K, Long>> message) {
+            Long minValue = vertex.getValue();
+            for(Tuple2<K, Long> l: message) {
+                if (minValue > l.f1) {
+                    minValue = l.f1;
+                }
+            }
+            if (minValue < vertex.getValue()) {
+                vertex.setUpdated(true);
+            }
+            setVertexValue(minValue);
         }
     }
 }
