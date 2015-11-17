@@ -43,7 +43,7 @@ public class ConnectedComponentsCompare {
         int edgesCount = verticesCount * 20;
 
         ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
-        environment.getConfig().disableSysoutLogging();
+//        environment.getConfig().disableSysoutLogging();
 
         Graph<Long, Long, Long> graph = GraphGenerator.generateGraph(verticesCount, edgesCount, environment);
 

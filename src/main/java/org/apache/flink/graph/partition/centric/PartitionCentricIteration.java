@@ -22,11 +22,13 @@ package org.apache.flink.graph.partition.centric;
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.operators.CustomUnaryOperation;
 import org.apache.flink.api.java.operators.DeltaIteration;
 import org.apache.flink.api.java.operators.FlatMapOperator;
 import org.apache.flink.api.java.operators.IterativeDataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.typeutils.GenericTypeInfo;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -35,6 +37,10 @@ import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Array;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Iterator;
 
 /**
@@ -92,24 +98,47 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                 initialVertices.iterate(maxIteration);
         iteration.name("Partition-centric iteration (" + updateFunction + " | " + messagingFunction + ")");
 
+        @SuppressWarnings("unchecked")
+        TypeInformation<K[]> neighbourListType = (TypeInformation<K[]>) TypeExtractor.createTypeInfo(
+                new GenericArrayType() {
+                    @SuppressWarnings("unchecked")
+                    K object = (K) new Object();
+                    @Override
+                    public Type getGenericComponentType() {
+                        return object.getClass();
+                    }
+                }
+        );
+        TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> puType =
+                new TupleTypeInfo<>(initialVertices.getType(), neighbourListType);
+
         // Update the partition
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
-                new PartitionUpdateUdf<>(updateFunction, initialVertices.getType());
-        DataSet<PCVertex<K, VV, EV>> updatedVertex =
+                new PartitionUpdateUdf<>(updateFunction, puType);
+        DataSet<Tuple2<PCVertex<K, VV, EV>, K[]>> partitionOutput =
                 iteration.mapPartition(partitionUpdater);
+
+        DataSet<PCVertex<K, VV, EV>> updatedVertices = partitionOutput.map(new MapFunction<Tuple2<PCVertex<K, VV, EV>, K[]>, PCVertex<K, VV, EV>>() {
+            @Override
+            public PCVertex<K, VV, EV> map(Tuple2<PCVertex<K, VV, EV>, K[]> value) throws Exception {
+                return value.f0;
+            }
+        });
 
         // Build the messages to pass to each vertex
         TypeInformation<Tuple2<K, Message>> messageTypeInfo = new TupleTypeInfo<>(keyType, messageType);
         MessagingUdf<K, VV, Message, EV> messenger = new MessagingUdf<>(messagingFunction, messageTypeInfo);
-        FlatMapOperator<?, Tuple2<K, Message>> messages =
-                updatedVertex.flatMap(messenger);
+        FlatMapOperator<?, Tuple2<K, Message>> messages = partitionOutput.flatMap(messenger);
 
-        // Combine the messages and deliver the result to each vertex
-        DataSet<PCVertex<K, VV, EV>> newSolution = messages.coGroup(updatedVertex)
+        // Send the message to the vertex for updating
+        updatedVertices = messages.coGroup(updatedVertices)
                         .where(0).equalTo(0)
                         .with(new VertexUpdateUdf<>(vertexUpdateFunction));
 
-        DataSet<PCVertex<K, VV, EV>> newWorkset = newSolution.filter(new FilterFunction<PCVertex<K, VV, EV>>() {
+        // Check if any vertex changed after receiving messages,
+        // if not then the iteration can be terminated
+        DataSet<PCVertex<K, VV, EV>> graphDelta = updatedVertices.filter(
+                new FilterFunction<PCVertex<K, VV, EV>>() {
             @Override
             public boolean filter(PCVertex<K, VV, EV> value) throws Exception {
                 return value.isUpdated();
@@ -117,7 +146,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         });
 
         // Finish iteration
-        return iteration.closeWith(newSolution, newWorkset);
+        return iteration.closeWith(updatedVertices, graphDelta);
     }
 
     private TypeInformation<Message> getMessageType(PartitionMessagingFunction<K, VV, Message, EV> mf) {
@@ -133,7 +162,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      * @param <EV>
      */
     private static class MessagingUdf<K, VV, Message, EV> extends
-            RichFlatMapFunction<PCVertex<K, VV, EV>, Tuple2<K, Message>> implements
+            RichFlatMapFunction<Tuple2<PCVertex<K, VV, EV>, K[]>, Tuple2<K, Message>> implements
             ResultTypeQueryable<Tuple2<K, Message>> {
         private static final long serialVersionUID = 1L;
 
@@ -162,10 +191,11 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
 
         @Override
-        public void flatMap(PCVertex<K, VV, EV> value, Collector<Tuple2<K, Message>> out) throws Exception {
+        public void flatMap(Tuple2<PCVertex<K, VV, EV>, K[]> value, Collector<Tuple2<K, Message>> out)
+                throws Exception {
             messagingFunction.setCollector(out);
-            messagingFunction.setSourceVertex(value);
-            messagingFunction.sendMessages();
+            messagingFunction.setSourceVertex(value.f0);
+            messagingFunction.sendMessages(value.f1);
         }
     }
 
@@ -179,14 +209,16 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      */
     private static class PartitionUpdateUdf<K, VV, EV, Message> extends RichMapPartitionFunction<
             PCVertex<K, VV, EV>,
-            PCVertex<K, VV, EV>> implements
-            ResultTypeQueryable<PCVertex<K, VV, EV>> {
+            Tuple2<PCVertex<K, VV, EV>, K[]>> implements
+            ResultTypeQueryable<Tuple2<PCVertex<K, VV, EV>, K[]>> {
         private static final long serialVersionUID = 1L;
 
         private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
-        private transient TypeInformation<PCVertex<K, VV, EV>> resultType;
+        private transient TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> resultType;
 
-        private PartitionUpdateUdf(PartitionUpdateFunction<K, VV, Message, EV> updateFunction, TypeInformation<PCVertex<K, VV, EV>> resultType) {
+        private PartitionUpdateUdf(
+                PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
+                TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> resultType) {
             this.updateFunction = updateFunction;
             this.resultType = resultType;
         }
@@ -197,15 +229,17 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             LOG.debug("Starting update iteration {}", getIterationRuntimeContext().getSuperstepNumber());
         }
 
+
         @Override
-        public TypeInformation<PCVertex<K, VV, EV>> getProducedType() {
-            return resultType;
+        public void mapPartition(Iterable<PCVertex<K, VV, EV>> values,
+                                 Collector<Tuple2<PCVertex<K, VV, EV>, K[]>> out) throws Exception {
+            updateFunction.setCollector(out);
+            updateFunction.updateVertex(values);
         }
 
         @Override
-        public void mapPartition(Iterable<PCVertex<K, VV, EV>> values, Collector<PCVertex<K, VV, EV>> out) throws Exception {
-            updateFunction.setCollector(out);
-            updateFunction.updateVertex(values);
+        public TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> getProducedType() {
+            return resultType;
         }
     }
 

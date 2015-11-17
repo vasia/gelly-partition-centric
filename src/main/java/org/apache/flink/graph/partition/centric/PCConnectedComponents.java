@@ -26,6 +26,7 @@ import org.apache.flink.graph.GraphAlgorithm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Array;
 import java.util.*;
 
 /**
@@ -105,7 +106,16 @@ public class PCConnectedComponents<K, EV> implements
 
             // Mark the vertex as updated
             for (PCVertex<K, Long, EV> vertex : partition.values()) {
-                updateVertex(vertex);
+                ArrayList<K> externalNeighbour = new ArrayList<>();
+                for (Map.Entry<K, EV> edge : vertex.getEdges().entrySet()) {
+                    if (!partition.containsKey(edge.getKey())) {
+                        externalNeighbour.add(edge.getKey());
+                    }
+                }
+                @SuppressWarnings("unchecked")
+                K[] externalNeighbourArray = (K[]) new Object[externalNeighbour.size()];
+                externalNeighbour.toArray(externalNeighbourArray);
+                updateVertex(vertex, externalNeighbourArray);
             }
         }
     }
@@ -118,9 +128,9 @@ public class PCConnectedComponents<K, EV> implements
         private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
 
         @Override
-        public void sendMessages() {
-            for (Map.Entry<K, EV> edge : sourceVertex.getEdges().entrySet()) {
-                sendMessageTo(edge.getKey(), sourceVertex.getValue());
+        public void sendMessages(K[] external) {
+            for (K vertex : external) {
+                sendMessageTo(vertex, sourceVertex.getValue());
             }
         }
     }

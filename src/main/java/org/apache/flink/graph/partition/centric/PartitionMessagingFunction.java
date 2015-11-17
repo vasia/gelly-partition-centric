@@ -51,7 +51,7 @@ public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements 
      * Implement this method to send message.
      * The source vertex is accessible through the private attribute sourceVertex
      */
-    public abstract void sendMessages();
+    public abstract void sendMessages(K[] external);
 
     public void init() {
         this.outValue = new Tuple2<>();

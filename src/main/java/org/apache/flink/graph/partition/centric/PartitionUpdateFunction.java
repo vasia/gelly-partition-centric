@@ -20,6 +20,7 @@
 package org.apache.flink.graph.partition.centric;
 
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
@@ -35,14 +36,14 @@ import java.io.Serializable;
 public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
     protected int currentStep;
-    protected Collector<PCVertex<K, VV, EV>> collector;
+    protected Collector<Tuple2<PCVertex<K, VV, EV>, K[]>> collector;
     protected boolean updated;
 
     public void setCurrentStep(int currentStep) {
         this.currentStep = currentStep;
     }
 
-    public void setCollector(Collector<PCVertex<K, VV, EV>> collector) {
+    public void setCollector(Collector<Tuple2<PCVertex<K, VV, EV>, K[]>> collector) {
         this.collector = collector;
     }
 
@@ -55,8 +56,8 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
      *
      * @param vertex
      */
-    protected void updateVertex(PCVertex<K, VV, EV> vertex) {
-        collector.collect(vertex);
+    protected void updateVertex(PCVertex<K, VV, EV> vertex, K[] external) {
+        collector.collect(new Tuple2<>(vertex, external));
     }
 
     /**
