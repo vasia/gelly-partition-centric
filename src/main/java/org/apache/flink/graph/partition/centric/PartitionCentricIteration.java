@@ -19,15 +19,13 @@
 
 package org.apache.flink.graph.partition.centric;
 
-import org.apache.flink.api.common.functions.FilterFunction;
-import org.apache.flink.api.common.functions.RichCoGroupFunction;
-import org.apache.flink.api.common.functions.RichFlatMapFunction;
-import org.apache.flink.api.common.functions.RichMapPartitionFunction;
+import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.operators.CustomUnaryOperation;
 import org.apache.flink.api.java.operators.DeltaIteration;
 import org.apache.flink.api.java.operators.FlatMapOperator;
+import org.apache.flink.api.java.operators.IterativeDataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
@@ -90,15 +88,15 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         TypeInformation<K> keyType = ((TupleTypeInfo<?>) vertexType).getTypeAt(0);
 
         // Start the iteration
-        DeltaIteration<PCVertex<K, VV, EV>, PCVertex<K, VV, EV>> iteration =
-                initialVertices.iterateDelta(initialVertices, maxIteration, 0);
+        IterativeDataSet<PCVertex<K, VV, EV>> iteration =
+                initialVertices.iterate(maxIteration);
         iteration.name("Partition-centric iteration (" + updateFunction + " | " + messagingFunction + ")");
 
         // Update the partition
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
                 new PartitionUpdateUdf<>(updateFunction, initialVertices.getType());
         DataSet<PCVertex<K, VV, EV>> updatedVertex =
-                iteration.getWorkset().mapPartition(partitionUpdater);
+                iteration.mapPartition(partitionUpdater);
 
         // Build the messages to pass to each vertex
         TypeInformation<Tuple2<K, Message>> messageTypeInfo = new TupleTypeInfo<>(keyType, messageType);
@@ -107,7 +105,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                 updatedVertex.flatMap(messenger);
 
         // Combine the messages and deliver the result to each vertex
-        DataSet<PCVertex<K, VV, EV>> newSolution = messages.coGroup(iteration.getSolutionSet())
+        DataSet<PCVertex<K, VV, EV>> newSolution = messages.coGroup(updatedVertex)
                         .where(0).equalTo(0)
                         .with(new VertexUpdateUdf<>(vertexUpdateFunction));
 
@@ -117,6 +115,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                 return value.isUpdated();
             }
         });
+
         // Finish iteration
         return iteration.closeWith(newSolution, newWorkset);
     }
