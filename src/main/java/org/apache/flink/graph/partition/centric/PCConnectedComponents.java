@@ -146,9 +146,8 @@ public class PCConnectedComponents<K, EV> implements
                 }
             }
             if (minValue < vertex.getValue()) {
-                vertex.setUpdated(true);
+                setVertexValue(minValue);
             }
-            setVertexValue(minValue);
         }
     }
 }

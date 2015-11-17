@@ -257,9 +257,11 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         public void coGroup(Iterable<Tuple2<K, Message>> first, Iterable<PCVertex<K, VV, EV>> second, Collector<PCVertex<K, VV, EV>> out) throws Exception {
             Iterator<PCVertex<K, VV, EV>> vertexIterator = second.iterator();
             if (vertexIterator.hasNext()) {
+                PCVertex<K, VV, EV> vertex = vertexIterator.next();
                 vertexUpdateFunction.setCollector(out);
-                vertexUpdateFunction.setVertex(vertexIterator.next());
+                vertexUpdateFunction.setVertex(vertex);
                 vertexUpdateFunction.updateVertex(first);
+                out.collect(vertex);
             } else {
                 throw new RuntimeException("Invalid vertex");
             }

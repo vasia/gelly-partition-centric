@@ -37,8 +37,8 @@ public abstract class VertexUpdateFunction<K, VV, Message, EV> implements Serial
     public abstract void updateVertex(Iterable<Tuple2<K, Message>> message);
 
     public void setVertexValue(VV value) {
+        vertex.setUpdated(true);
         vertex.setValue(value);
-        collector.collect(vertex);
     }
 
     public void setCollector(Collector<PCVertex<K, VV, EV>> collector) {
