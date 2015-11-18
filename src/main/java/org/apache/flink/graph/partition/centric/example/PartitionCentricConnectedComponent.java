@@ -75,9 +75,9 @@ public class PartitionCentricConnectedComponent {
         Graph<Integer, Long, Integer> graph = Graph.fromCollection(vertices, edges, environment);
 
         PCConnectedComponents<Integer, Integer> connectedComponents = new PCConnectedComponents<>(10);
-        List<PCVertex<Integer, Long, NullValue>> ret = connectedComponents.run(graph).collect();
+        List<Vertex<Integer, Long>> ret = connectedComponents.run(graph).collect();
 
-        for(PCVertex<Integer, Long, NullValue> vertex: ret) {
+        for(Vertex<Integer, Long> vertex: ret) {
             System.out.printf("Vertex id: %d, value: %d%n",
                     vertex.getId(), vertex.getValue());
         }

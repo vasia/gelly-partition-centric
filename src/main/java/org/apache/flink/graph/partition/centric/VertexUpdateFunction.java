@@ -20,6 +20,7 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
@@ -31,17 +32,21 @@ import java.io.Serializable;
  * @param <Message>
  */
 public abstract class VertexUpdateFunction<K, VV, Message, EV> implements Serializable{
-    protected PCVertex<K, VV, EV> vertex;
-
+    protected Vertex<K, VV> vertex;
+    private boolean updated;
     public abstract void updateVertex(Iterable<Tuple2<K, Message>> message);
 
     public void setVertexValue(VV value) {
-        vertex.setUpdated(true);
+        updated = true;
         vertex.setValue(value);
     }
 
-    public void setVertex(PCVertex<K, VV, EV> vertex) {
+    public void setVertex(Vertex<K, VV> vertex) {
         this.vertex = vertex;
-        this.vertex.setUpdated(false);
+        updated = false;
+    }
+
+    public boolean isUpdated() {
+        return updated;
     }
 }

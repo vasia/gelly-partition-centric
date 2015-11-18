@@ -21,8 +21,10 @@ package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.utils.NullValueEdgeMapper;
 import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
@@ -37,7 +39,7 @@ import java.util.*;
  * @param <EV>
  */
 public class PCConnectedComponents<K, EV> implements
-        GraphAlgorithm<K, Long, EV, DataSet<PCVertex<K, Long, NullValue>>> {
+        GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
 
     private int maxIteration;
 
@@ -46,7 +48,7 @@ public class PCConnectedComponents<K, EV> implements
     }
 
     @Override
-    public DataSet<PCVertex<K, Long, NullValue>> run(Graph<K, Long, EV> input) throws Exception {
+    public DataSet<Vertex<K, Long>> run(Graph<K, Long, EV> input) throws Exception {
         Graph<K, Long, NullValue> undirectedGraph = input.mapEdges(new NullValueEdgeMapper<K, EV>())
                 .getUndirected();
         PCGraph<K, Long, NullValue> pcGraph = PCGraph.fromGraph(undirectedGraph);
@@ -70,28 +72,19 @@ public class PCConnectedComponents<K, EV> implements
         private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
 
         @Override
-        public void updateVertex(Iterable<PCVertex<K, Long, EV>> v) throws Exception {
-            HashMap<K, PCVertex<K, Long, EV>> partition = new HashMap<>();
+        public void updateVertex(Iterable<Tuple2<Vertex<K, Long>, HashMap<K, EV>>> v) throws Exception {
+            HashMap<K, Vertex<K, Long>> partition = new HashMap<>();
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
-
-            for (PCVertex<K, Long, EV> vertex : v) {
+            for (Tuple2<Vertex<K, Long>, HashMap<K, EV>> i : v) {
+                Vertex<K, Long> vertex = i.f0;
                 partition.put(vertex.getId(), vertex);
                 nodeStore.put(vertex.getId(), unionFind.makeNode(vertex.getValue()));
-            }
-
-            for (PCVertex<K, Long, EV> vertex: partition.values()) {
-                for(Map.Entry<K, EV> edge: vertex.getEdges().entrySet()) {
+                for(Map.Entry<K, EV> edge: i.f1.entrySet()) {
                     if (!nodeStore.containsKey(edge.getKey())) {
                         nodeStore.put(edge.getKey(), unionFind.makeNode(Long.MAX_VALUE));
                     }
-                }
-            }
-
-            for (PCVertex<K, Long, EV> vertex : partition.values()) {
-                UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
-                for(K neighbour: vertex.getEdges().keySet()) {
-                    unionFind.union(vNode, nodeStore.get(neighbour));
+                    unionFind.union(nodeStore.get(vertex.getId()), nodeStore.get(edge.getKey()));
                 }
             }
 
@@ -108,7 +101,7 @@ public class PCConnectedComponents<K, EV> implements
                 }
             }
 
-            for (PCVertex<K, Long, EV> vertex : partition.values()) {
+            for (Vertex<K, Long> vertex : partition.values()) {
                 UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
                 vertex.setValue(unionFind.find(vNode).value);
                 ArrayList<K> externalNeighbour;

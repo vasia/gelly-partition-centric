@@ -19,12 +19,10 @@
 
 package org.apache.flink.graph.partition.centric;
 
-import org.apache.flink.api.common.functions.CoGroupFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,13 +36,15 @@ import org.slf4j.LoggerFactory;
 public class PCGraph<K, VV, EV> {
     private static final Logger LOG = LoggerFactory.getLogger(PCGraph.class);
 
-    private final DataSet<PCVertex<K, VV, EV>> vertices;
+    private final DataSet<Vertex<K, VV>> vertices;
+    private final DataSet<Edge<K, EV>> edges;
 
-    private PCGraph(DataSet<PCVertex<K, VV, EV>> vertices) {
+    private PCGraph(DataSet<Vertex<K, VV>> vertices, DataSet<Edge<K, EV>> edges) {
         this.vertices = vertices;
+        this.edges = edges;
     }
 
-    public DataSet<PCVertex<K, VV, EV>> getVertices() {
+    public DataSet<Vertex<K, VV>> getVertices() {
         return vertices;
     }
 
@@ -52,26 +52,26 @@ public class PCGraph<K, VV, EV> {
         DataSet<Vertex<K, VV>> graphVertices = graph.getVertices();
         final DataSet<Edge<K, EV>> graphEdges = graph.getEdges();
 
-        DataSet<PCVertex<K, VV, EV>> pcVertices = graphVertices.coGroup(graphEdges).where(0).equalTo(0).with(
-                new CoGroupFunction<Vertex<K, VV>, Edge<K, EV>, PCVertex<K, VV, EV>>() {
-                    @Override
-                    public void coGroup(
-                            Iterable<Vertex<K, VV>> first,
-                            Iterable<Edge<K, EV>> second,
-                            Collector<PCVertex<K, VV, EV>> out) throws Exception {
-                        PCVertex<K, VV, EV> pcVertex = new PCVertex<>();
-                        for (Vertex<K, VV> v : first) {
-                            pcVertex.setId(v.getId());
-                            pcVertex.setValue(v.getValue());
-                        }
-                        for (Edge<K, EV> e : second) {
-                            pcVertex.putEdge(e.getTarget(), e.getValue());
-                        }
-                        out.collect(pcVertex);
-                    }
-                }
-        );
-        return new PCGraph<>(pcVertices);
+//        DataSet<PCVertex<K, VV, EV>> pcVertices = graphVertices.coGroup(graphEdges).where(0).equalTo(0).with(
+//                new CoGroupFunction<Vertex<K, VV>, Edge<K, EV>, PCVertex<K, VV, EV>>() {
+//                    @Override
+//                    public void coGroup(
+//                            Iterable<Vertex<K, VV>> first,
+//                            Iterable<Edge<K, EV>> second,
+//                            Collector<PCVertex<K, VV, EV>> out) throws Exception {
+//                        PCVertex<K, VV, EV> pcVertex = new PCVertex<>();
+//                        for (Vertex<K, VV> v : first) {
+//                            pcVertex.setId(v.getId());
+//                            pcVertex.setValue(v.getValue());
+//                        }
+//                        for (Edge<K, EV> e : second) {
+//                            pcVertex.putEdge(e.getTarget(), e.getValue());
+//                        }
+//                        out.collect(pcVertex);
+//                    }
+//                }
+//        );
+        return new PCGraph<>(graphVertices, graphEdges);
     }
 
     public<Message> PCGraph<K, VV, EV> runPartitionCentricIteration(
@@ -80,10 +80,10 @@ public class PCGraph<K, VV, EV> {
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
             int maximumNumOperations) {
         PartitionCentricIteration<K, VV, Message, EV> iteration = new PartitionCentricIteration<>(
-                updateFunction, messagingFunction, vertexUpdateFunction, maximumNumOperations);
+                updateFunction, messagingFunction, vertexUpdateFunction, maximumNumOperations, edges);
 
-        DataSet<PCVertex<K, VV, EV>> updatedVertices = vertices.runOperation(iteration);
+        DataSet<Vertex<K, VV>> updatedVertices = vertices.runOperation(iteration);
 
-        return new PCGraph<>(updatedVertices);
+        return new PCGraph<>(updatedVertices, edges);
     }
 }

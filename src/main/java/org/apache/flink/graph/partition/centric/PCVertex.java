@@ -19,6 +19,7 @@
 
 package org.apache.flink.graph.partition.centric;
 
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple4;
 
 import java.util.HashMap;
@@ -32,19 +33,17 @@ import java.util.HashMap;
  * @param <VV> The type of a vertex's value
  * @param <EV> The type of an edge's value
  */
-public class PCVertex<K, VV, EV> extends Tuple4<K, VV, HashMap<K, EV>, Boolean> {
+public class PCVertex<K, VV, EV> extends Tuple3<K, VV, Boolean> {
     private static final long serialVersionUID = 1L;
 
     public PCVertex() {
-        this.f2 = new HashMap<>();
-        this.f3 = false;
+        this.f2 = false;
     }
 
-    public PCVertex(K id, VV value, HashMap<K, EV> edges, Boolean updated) {
+    public PCVertex(K id, VV value, Boolean updated) {
         this.f0 = id;
         this.f1 = value;
-        this.f2 = edges;
-        this.f3 = updated;
+        this.f2 = updated;
     }
 
     public K getId() {
@@ -63,28 +62,12 @@ public class PCVertex<K, VV, EV> extends Tuple4<K, VV, HashMap<K, EV>, Boolean> 
         this.f1 = value;
     }
 
-    public HashMap<K, EV> getEdges() {
+    public boolean isUpdated() {
         return f2;
     }
 
-    public void setEdges(HashMap<K, EV> edges) {
-        this.f2 = edges;
-    }
-
-    public EV putEdge(K target, EV value) {
-        return f2.put(target, value);
-    }
-
-    public EV removeEdge(K target) {
-        return f2.remove(target);
-    }
-
-    public boolean isUpdated() {
-        return f3;
-    }
-
     public void setUpdated(boolean updated) {
-        this.f3 = updated;
+        this.f2 = updated;
     }
 
 }

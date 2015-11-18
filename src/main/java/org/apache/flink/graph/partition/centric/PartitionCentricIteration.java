@@ -22,25 +22,24 @@ package org.apache.flink.graph.partition.centric;
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.operators.CoGroupOperator;
 import org.apache.flink.api.java.operators.CustomUnaryOperation;
-import org.apache.flink.api.java.operators.DeltaIteration;
 import org.apache.flink.api.java.operators.FlatMapOperator;
 import org.apache.flink.api.java.operators.IterativeDataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.typeutils.GenericTypeInfo;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 
 /**
@@ -52,7 +51,7 @@ import java.util.Iterator;
  * @param <EV>
  */
 public class PartitionCentricIteration<K, VV, Message, EV> implements
-        CustomUnaryOperation<PCVertex<K, VV, EV>, PCVertex<K, VV, EV>> {
+        CustomUnaryOperation<Vertex<K, VV>, Vertex<K, VV>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(PartitionCentricIteration.class);
 
@@ -66,37 +65,34 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
     private final TypeInformation<Message> messageType;
 
-    private DataSet<PCVertex<K, VV, EV>> initialVertices;
+    private DataSet<Vertex<K, VV>> initialVertices;
+    private final DataSet<Edge<K, EV>> edges;
 
     public PartitionCentricIteration(
             PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
             PartitionMessagingFunction<K, VV, Message, EV> messagingFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
-            int maxIteration) {
+            int maxIteration, DataSet<Edge<K, EV>> edges) {
         this.updateFunction = updateFunction;
         this.messagingFunction = messagingFunction;
         this.vertexUpdateFunction = vertexUpdateFunction;
         this.maxIteration = maxIteration;
+        this.edges = edges;
         this.messageType = getMessageType(messagingFunction);
     }
 
     @Override
-    public void setInput(DataSet<PCVertex<K, VV, EV>> inputData) {
+    public void setInput(DataSet<Vertex<K, VV>> inputData) {
         this.initialVertices = inputData;
     }
 
     @Override
-    public DataSet<PCVertex<K, VV, EV>> createResult() {
+    public DataSet<Vertex<K, VV>> createResult() {
         if (this.initialVertices == null) {
             throw new RuntimeException("Initial vertices not set");
         }
-        TypeInformation<PCVertex<K, VV, EV>> vertexType = initialVertices.getType();
+        TypeInformation<Vertex<K, VV>> vertexType = initialVertices.getType();
         TypeInformation<K> keyType = ((TupleTypeInfo<?>) vertexType).getTypeAt(0);
-
-        // Start the iteration
-        IterativeDataSet<PCVertex<K, VV, EV>> iteration =
-                initialVertices.iterate(maxIteration);
-        iteration.name("Partition-centric iteration (" + updateFunction + " | " + messagingFunction + ")");
 
         @SuppressWarnings("unchecked")
         TypeInformation<K[]> neighbourListType = (TypeInformation<K[]>) TypeExtractor.createTypeInfo(
@@ -109,18 +105,27 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                     }
                 }
         );
-        TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> puType =
+        TypeInformation<Tuple2<Vertex<K, VV>, K[]>> puType =
                 new TupleTypeInfo<>(initialVertices.getType(), neighbourListType);
+
+        // Start the iteration
+        IterativeDataSet<Vertex<K, VV>> iteration =
+                initialVertices.iterate(maxIteration);
+        iteration.name("Partition-centric iteration (" + updateFunction + " | " + messagingFunction + ")");
+
+        // Join the edges into the vertices
+        CoGroupOperator<?, ?, Tuple2<Vertex<K, VV>, HashMap<K, EV>>> vertexEdges =
+                iteration.coGroup(edges).where(0).equalTo(0).with(new AdjacencyListBuilder<K, VV, EV>());
 
         // Update the partition
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
                 new PartitionUpdateUdf<>(updateFunction, puType);
-        DataSet<Tuple2<PCVertex<K, VV, EV>, K[]>> partitionOutput =
-                iteration.mapPartition(partitionUpdater);
+        DataSet<Tuple2<Vertex<K, VV>, K[]>> partitionOutput =
+                vertexEdges.mapPartition(partitionUpdater);
 
-        DataSet<PCVertex<K, VV, EV>> updatedVertices = partitionOutput.map(new MapFunction<Tuple2<PCVertex<K, VV, EV>, K[]>, PCVertex<K, VV, EV>>() {
+        DataSet<Vertex<K, VV>> updatedVertices = partitionOutput.map(new MapFunction<Tuple2<Vertex<K, VV>, K[]>, Vertex<K, VV>>() {
             @Override
-            public PCVertex<K, VV, EV> map(Tuple2<PCVertex<K, VV, EV>, K[]> value) throws Exception {
+            public Vertex<K, VV> map(Tuple2<Vertex<K, VV>, K[]> value) throws Exception {
                 return value.f0;
             }
         });
@@ -131,20 +136,26 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         FlatMapOperator<?, Tuple2<K, Message>> messages = partitionOutput.flatMap(messenger);
 
         // Send the message to the vertex for updating
-        updatedVertices = messages.coGroup(updatedVertices)
+        DataSet<Tuple2<Vertex<K, VV>, Boolean>> newGraph = messages.coGroup(updatedVertices)
                         .where(0).equalTo(0)
                         .with(new VertexUpdateUdf<>(vertexUpdateFunction));
 
         // Check if any vertex changed after receiving messages,
         // if not then the iteration can be terminated
-        DataSet<PCVertex<K, VV, EV>> graphDelta = updatedVertices.filter(
-                new FilterFunction<PCVertex<K, VV, EV>>() {
+        DataSet<Tuple2<Vertex<K, VV>, Boolean>> graphDelta = newGraph.filter(
+                new FilterFunction<Tuple2<Vertex<K, VV>, Boolean>>() {
             @Override
-            public boolean filter(PCVertex<K, VV, EV> value) throws Exception {
-                return value.isUpdated();
+            public boolean filter(Tuple2<Vertex<K, VV>, Boolean> value) throws Exception {
+                return value.f1;
             }
         });
 
+        updatedVertices = newGraph.map(new MapFunction<Tuple2<Vertex<K, VV>, Boolean>, Vertex<K, VV>>() {
+            @Override
+            public Vertex<K, VV> map(Tuple2<Vertex<K, VV>, Boolean> value) throws Exception {
+                return value.f0;
+            }
+        });
         // Finish iteration
         return iteration.closeWith(updatedVertices, graphDelta);
     }
@@ -162,7 +173,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      * @param <EV>
      */
     private static class MessagingUdf<K, VV, Message, EV> extends
-            RichFlatMapFunction<Tuple2<PCVertex<K, VV, EV>, K[]>, Tuple2<K, Message>> implements
+            RichFlatMapFunction<Tuple2<Vertex<K, VV>, K[]>, Tuple2<K, Message>> implements
             ResultTypeQueryable<Tuple2<K, Message>> {
         private static final long serialVersionUID = 1L;
 
@@ -191,7 +202,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
 
         @Override
-        public void flatMap(Tuple2<PCVertex<K, VV, EV>, K[]> value, Collector<Tuple2<K, Message>> out)
+        public void flatMap(Tuple2<Vertex<K, VV>, K[]> value, Collector<Tuple2<K, Message>> out)
                 throws Exception {
             messagingFunction.setCollector(out);
             messagingFunction.setSourceVertex(value.f0);
@@ -208,17 +219,17 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      * @param <Message>
      */
     private static class PartitionUpdateUdf<K, VV, EV, Message> extends RichMapPartitionFunction<
-            PCVertex<K, VV, EV>,
-            Tuple2<PCVertex<K, VV, EV>, K[]>> implements
-            ResultTypeQueryable<Tuple2<PCVertex<K, VV, EV>, K[]>> {
+            Tuple2<Vertex<K, VV>, HashMap<K, EV>>,
+            Tuple2<Vertex<K, VV>, K[]>> implements
+            ResultTypeQueryable<Tuple2<Vertex<K, VV>, K[]>> {
         private static final long serialVersionUID = 1L;
 
         private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
-        private transient TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> resultType;
+        private transient TypeInformation<Tuple2<Vertex<K, VV>, K[]>> resultType;
 
         private PartitionUpdateUdf(
                 PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
-                TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> resultType) {
+                TypeInformation<Tuple2<Vertex<K, VV>, K[]>> resultType) {
             this.updateFunction = updateFunction;
             this.resultType = resultType;
         }
@@ -231,22 +242,22 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
 
         @Override
-        public void mapPartition(Iterable<PCVertex<K, VV, EV>> values,
-                                 Collector<Tuple2<PCVertex<K, VV, EV>, K[]>> out) throws Exception {
+        public void mapPartition(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> values,
+                                 Collector<Tuple2<Vertex<K, VV>, K[]>> out) throws Exception {
             updateFunction.setCollector(out);
             updateFunction.updateVertex(values);
         }
 
         @Override
-        public TypeInformation<Tuple2<PCVertex<K, VV, EV>, K[]>> getProducedType() {
+        public TypeInformation<Tuple2<Vertex<K, VV>, K[]>> getProducedType() {
             return resultType;
         }
     }
 
     private static class VertexUpdateUdf<K, Message, VV, EV> extends
             RichCoGroupFunction<
-                    Tuple2<K, Message>, PCVertex<K, VV, EV>,
-                    PCVertex<K, VV, EV>> {
+                    Tuple2<K, Message>, Vertex<K, VV>,
+                    Tuple2<Vertex<K, VV>, Boolean>> {
         private final VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction;
 
         private VertexUpdateUdf(VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction) {
@@ -254,15 +265,33 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
 
         @Override
-        public void coGroup(Iterable<Tuple2<K, Message>> first, Iterable<PCVertex<K, VV, EV>> second, Collector<PCVertex<K, VV, EV>> out) throws Exception {
-            Iterator<PCVertex<K, VV, EV>> vertexIterator = second.iterator();
+        public void coGroup(Iterable<Tuple2<K, Message>> first, Iterable<Vertex<K, VV>> second, Collector<Tuple2<Vertex<K, VV>, Boolean>> out) throws Exception {
+            Iterator<Vertex<K, VV>> vertexIterator = second.iterator();
             if (vertexIterator.hasNext()) {
-                PCVertex<K, VV, EV> vertex = vertexIterator.next();
+                Vertex<K, VV> vertex = vertexIterator.next();
                 vertexUpdateFunction.setVertex(vertex);
                 vertexUpdateFunction.updateVertex(first);
-                out.collect(vertex);
+                out.collect(new Tuple2<>(vertex, vertexUpdateFunction.isUpdated()));
             } else {
                 throw new RuntimeException("Invalid vertex");
+            }
+        }
+    }
+
+    private static class AdjacencyListBuilder<K, VV, EV> extends
+            RichCoGroupFunction<Vertex<K,VV>, Edge<K,EV>, Tuple2<Vertex<K, VV>, HashMap<K, EV>>> {
+        @Override
+        public void coGroup(Iterable<Vertex<K, VV>> first,
+                            Iterable<Edge<K, EV>> second,
+                            Collector<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> out) throws Exception {
+            Iterator<Vertex<K, VV>> vertexIterator = first.iterator();
+            if (vertexIterator.hasNext()) {
+                Vertex<K, VV> vertex = vertexIterator.next();
+                HashMap<K, EV> adjacencyList = new HashMap<K, EV>();
+                for(Edge<K, EV> e: second) {
+                    adjacencyList.put(e.getTarget(), e.getValue());
+                }
+                out.collect(new Tuple2<>(vertex, adjacencyList));
             }
         }
     }

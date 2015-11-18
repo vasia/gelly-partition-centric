@@ -21,6 +21,7 @@ package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,7 @@ public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements 
     private Tuple2<K, Message> outValue;
     private Collector<Tuple2<K, Message>> collector;
     protected int currentStep;
-    protected PCVertex<K, VV, EV> sourceVertex;
+    protected Vertex<K, VV> sourceVertex;
 
     /**
      * Implement this method to send message.
@@ -75,7 +76,7 @@ public abstract class PartitionMessagingFunction<K, VV, Message, EV> implements 
         this.collector = collector;
     }
 
-    public void setSourceVertex(PCVertex<K, VV, EV> sourceVertex) {
+    public void setSourceVertex(Vertex<K, VV> sourceVertex) {
         this.sourceVertex = sourceVertex;
     }
 

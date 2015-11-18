@@ -23,6 +23,7 @@ import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Graph;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.partition.centric.utils.GraphGenerator;
 import org.apache.flink.test.testdata.ConnectedComponentsData;
 import org.apache.flink.types.NullValue;
@@ -49,9 +50,9 @@ public class PCConnectedComponentsTest {
         PCConnectedComponents<Long, Long> algo = new PCConnectedComponents<>(verticesCount);
 
         List<Tuple2<Long, Long>> result = algo.run(graph).map(
-                new RichMapFunction<PCVertex<Long, Long, NullValue>, Tuple2<Long, Long>>() {
+                new RichMapFunction<Vertex<Long, Long>, Tuple2<Long, Long>>() {
                     @Override
-                    public Tuple2<Long, Long> map(PCVertex<Long, Long, NullValue> value) throws Exception {
+                    public Tuple2<Long, Long> map(Vertex<Long, Long> value) throws Exception {
                         return new Tuple2<>(value.getId(), value.getValue());
                     }
         }).collect();

@@ -21,9 +21,11 @@ package org.apache.flink.graph.partition.centric;
 
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
+import java.util.HashMap;
 
 /**
  * Users need to subclass this class and implement their partition processing method
@@ -36,14 +38,14 @@ import java.io.Serializable;
 public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
     protected int currentStep;
-    protected Collector<Tuple2<PCVertex<K, VV, EV>, K[]>> collector;
+    protected Collector<Tuple2<Vertex<K, VV>, K[]>> collector;
     protected boolean updated;
 
     public void setCurrentStep(int currentStep) {
         this.currentStep = currentStep;
     }
 
-    public void setCollector(Collector<Tuple2<PCVertex<K, VV, EV>, K[]>> collector) {
+    public void setCollector(Collector<Tuple2<Vertex<K, VV>, K[]>> collector) {
         this.collector = collector;
     }
 
@@ -56,7 +58,7 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
      *
      * @param vertex
      */
-    protected void updateVertex(PCVertex<K, VV, EV> vertex, K[] external) {
+    protected void updateVertex(Vertex<K, VV> vertex, K[] external) {
         collector.collect(new Tuple2<>(vertex, external));
     }
 
@@ -67,5 +69,5 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
      * @param inMessages The messages to the vertices of the partition
      * @throws Exception
      */
-    public abstract void updateVertex(Iterable<PCVertex<K, VV, EV>> inMessages) throws Exception;
+    public abstract void updateVertex(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> inMessages) throws Exception;
 }
