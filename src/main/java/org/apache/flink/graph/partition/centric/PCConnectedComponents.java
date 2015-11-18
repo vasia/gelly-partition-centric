@@ -72,10 +72,21 @@ public class PCConnectedComponents<K, EV> implements
 
         @Override
         public void updateVertex(Iterable<PCVertex<K, Long, EV>> v) throws Exception {
-            Set<PCVertex<K, Long, EV>> updated = new HashSet<>();
             HashMap<K, PCVertex<K, Long, EV>> partition = new HashMap<>();
             for (PCVertex<K, Long, EV> vertex : v) {
                 partition.put(vertex.getId(), vertex);
+            }
+
+            HashMap<K, ArrayList<K>> internalNeighbour = new HashMap<>();
+            for (PCVertex<K, Long, EV> vertex: partition.values()) {
+                for(Map.Entry<K, EV> edge: vertex.getEdges().entrySet()) {
+                    if (partition.containsKey(edge.getKey())) {
+                        if (!internalNeighbour.containsKey(vertex.getId())) {
+                            internalNeighbour.put(vertex.getId(), new ArrayList<K>());
+                        }
+                        internalNeighbour.get(vertex.getId()).add(edge.getKey());
+                    }
+                }
             }
 
             // Run connected component on the partition
@@ -88,27 +99,24 @@ public class PCConnectedComponents<K, EV> implements
                     });
 
             // Update priority queue to min value
-            Map<K, PCVertex<K, Long, EV>> verticesMap = new HashMap<>();
             for (PCVertex<K, Long, EV> vertex : partition.values()) {
                 pq.add(vertex);
-                verticesMap.put(vertex.getId(), vertex);
             }
             while (!pq.isEmpty()) {
                 PCVertex<K, Long, EV> top = pq.poll();
-                for (Map.Entry<K, EV> edge : top.getEdges().entrySet()) {
-                    if (verticesMap.containsKey(edge.getKey())) {
-                        PCVertex<K, Long, EV> item = verticesMap.get(edge.getKey());
-                        if (item.getValue() > top.getValue()) {
-                            pq.remove(item);
-                            item.setValue(top.getValue());
-                            updated.add(item);
-                            pq.add(item);
-                        }
+                if (!internalNeighbour.containsKey(top.getId())) {
+                    continue;
+                }
+                for (K edge : internalNeighbour.get(top.getId())) {
+                    PCVertex<K, Long, EV> item = partition.get(edge);
+                    if (item.getValue() > top.getValue()) {
+                        pq.remove(item);
+                        item.setValue(top.getValue());
+                        pq.add(item);
                     }
                 }
             }
 
-            // Mark the vertex as updated
             for (PCVertex<K, Long, EV> vertex : partition.values()) {
                 ArrayList<K> externalNeighbour = new ArrayList<>();
                 for (Map.Entry<K, EV> edge : vertex.getEdges().entrySet()) {
