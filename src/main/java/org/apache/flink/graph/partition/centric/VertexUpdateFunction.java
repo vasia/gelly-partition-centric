@@ -31,7 +31,6 @@ import java.io.Serializable;
  * @param <Message>
  */
 public abstract class VertexUpdateFunction<K, VV, Message, EV> implements Serializable{
-    private Collector<PCVertex<K, VV, EV>> collector;
     protected PCVertex<K, VV, EV> vertex;
 
     public abstract void updateVertex(Iterable<Tuple2<K, Message>> message);
@@ -39,10 +38,6 @@ public abstract class VertexUpdateFunction<K, VV, Message, EV> implements Serial
     public void setVertexValue(VV value) {
         vertex.setUpdated(true);
         vertex.setValue(value);
-    }
-
-    public void setCollector(Collector<PCVertex<K, VV, EV>> collector) {
-        this.collector = collector;
     }
 
     public void setVertex(PCVertex<K, VV, EV> vertex) {

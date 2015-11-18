@@ -258,7 +258,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             Iterator<PCVertex<K, VV, EV>> vertexIterator = second.iterator();
             if (vertexIterator.hasNext()) {
                 PCVertex<K, VV, EV> vertex = vertexIterator.next();
-                vertexUpdateFunction.setCollector(out);
                 vertexUpdateFunction.setVertex(vertex);
                 vertexUpdateFunction.updateVertex(first);
                 out.collect(vertex);
