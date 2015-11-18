@@ -28,7 +28,6 @@ import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Array;
 import java.util.*;
 
 /**
@@ -73,8 +72,12 @@ public class PCConnectedComponents<K, EV> implements
         @Override
         public void updateVertex(Iterable<PCVertex<K, Long, EV>> v) throws Exception {
             HashMap<K, PCVertex<K, Long, EV>> partition = new HashMap<>();
+            HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
+            UnionFind<Long> unionFind = new UnionFind<>();
+
             for (PCVertex<K, Long, EV> vertex : v) {
                 partition.put(vertex.getId(), vertex);
+                nodeStore.put(vertex.getId(), unionFind.makeNode(vertex.getValue()));
             }
 
             HashMap<K, ArrayList<K>> internalNeighbour = new HashMap<>();
@@ -89,35 +92,19 @@ public class PCConnectedComponents<K, EV> implements
                 }
             }
 
-            // Run connected component on the partition
-            PriorityQueue<PCVertex<K, Long, EV>> pq = new PriorityQueue<>(
-                    new Comparator<PCVertex<K, Long, EV>>() {
-                        @Override
-                        public int compare(PCVertex<K, Long, EV> o1, PCVertex<K, Long, EV> o2) {
-                            return o1.getValue().compareTo(o2.getValue());
-                        }
-                    });
-
-            // Update priority queue to min value
             for (PCVertex<K, Long, EV> vertex : partition.values()) {
-                pq.add(vertex);
-            }
-            while (!pq.isEmpty()) {
-                PCVertex<K, Long, EV> top = pq.poll();
-                if (!internalNeighbour.containsKey(top.getId())) {
+                if (!internalNeighbour.containsKey(vertex.getId())) {
                     continue;
                 }
-                for (K edge : internalNeighbour.get(top.getId())) {
-                    PCVertex<K, Long, EV> item = partition.get(edge);
-                    if (item.getValue() > top.getValue()) {
-                        pq.remove(item);
-                        item.setValue(top.getValue());
-                        pq.add(item);
-                    }
+                UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
+                for(K neighbour: internalNeighbour.get(vertex.getId())) {
+                    unionFind.union(vNode, nodeStore.get(neighbour));
                 }
             }
 
             for (PCVertex<K, Long, EV> vertex : partition.values()) {
+                UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
+                vertex.setValue(unionFind.find(vNode).value);
                 ArrayList<K> externalNeighbour = new ArrayList<>();
                 for (Map.Entry<K, EV> edge : vertex.getEdges().entrySet()) {
                     if (!partition.containsKey(edge.getKey())) {
@@ -160,6 +147,43 @@ public class PCConnectedComponents<K, EV> implements
             if (minValue < vertex.getValue()) {
                 setVertexValue(minValue);
             }
+        }
+    }
+
+    private static class UnionFind<K extends Comparable<K>> {
+        public UnionFindNode<K> makeNode(K value) {
+            UnionFindNode<K> node = new UnionFindNode<>(value);
+            node.parent = node;
+            return node;
+        }
+
+        public void union(UnionFindNode<K> left, UnionFindNode<K> right) {
+            UnionFindNode<K> leftRoot = find(left);
+            UnionFindNode<K> rightRoot = find(right);
+            if (leftRoot.equals(rightRoot)) {
+                return;
+            }
+            if (leftRoot.value.compareTo(rightRoot.value) > 0) {
+                leftRoot.parent = rightRoot;
+            } else {
+                rightRoot.parent = leftRoot;
+            }
+        }
+
+        public UnionFindNode<K> find(UnionFindNode<K> n) {
+            if (n.parent != n) {
+                n.parent = find(n.parent);
+            }
+            return n.parent;
+        }
+    }
+
+    private static class UnionFindNode<K extends Comparable<K>> {
+        K value;
+        UnionFindNode<K> parent;
+
+        public UnionFindNode(K value) {
+            this.value = value;
         }
     }
 }
