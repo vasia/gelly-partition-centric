@@ -80,36 +80,45 @@ public class PCConnectedComponents<K, EV> implements
                 nodeStore.put(vertex.getId(), unionFind.makeNode(vertex.getValue()));
             }
 
-            HashMap<K, ArrayList<K>> internalNeighbour = new HashMap<>();
             for (PCVertex<K, Long, EV> vertex: partition.values()) {
                 for(Map.Entry<K, EV> edge: vertex.getEdges().entrySet()) {
-                    if (partition.containsKey(edge.getKey())) {
-                        if (!internalNeighbour.containsKey(vertex.getId())) {
-                            internalNeighbour.put(vertex.getId(), new ArrayList<K>());
-                        }
-                        internalNeighbour.get(vertex.getId()).add(edge.getKey());
+                    if (!nodeStore.containsKey(edge.getKey())) {
+                        nodeStore.put(edge.getKey(), unionFind.makeNode(Long.MAX_VALUE));
                     }
                 }
             }
 
             for (PCVertex<K, Long, EV> vertex : partition.values()) {
-                if (!internalNeighbour.containsKey(vertex.getId())) {
-                    continue;
-                }
                 UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
-                for(K neighbour: internalNeighbour.get(vertex.getId())) {
+                for(K neighbour: vertex.getEdges().keySet()) {
                     unionFind.union(vNode, nodeStore.get(neighbour));
+                }
+            }
+
+            // Group the external nodes according to their value
+            Map<Long, ArrayList<K>> outgoing = new HashMap<>();
+            for(K id: nodeStore.keySet()) {
+                if (!partition.containsKey(id)) {
+                    // external node
+                    Long value = unionFind.find(nodeStore.get(id)).value;
+                    if (!outgoing.containsKey(value)) {
+                        outgoing.put(value, new ArrayList<K>());
+                    }
+                    outgoing.get(value).add(id);
                 }
             }
 
             for (PCVertex<K, Long, EV> vertex : partition.values()) {
                 UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
                 vertex.setValue(unionFind.find(vNode).value);
-                ArrayList<K> externalNeighbour = new ArrayList<>();
-                for (Map.Entry<K, EV> edge : vertex.getEdges().entrySet()) {
-                    if (!partition.containsKey(edge.getKey())) {
-                        externalNeighbour.add(edge.getKey());
-                    }
+                ArrayList<K> externalNeighbour;
+                if (outgoing.containsKey(vertex.getValue())) {
+                    // This node will take responsibility to send its value to all external nodes
+                    // that has the same value as itself
+                    externalNeighbour = outgoing.get(vertex.getValue());
+                    outgoing.remove(vertex.getValue());
+                } else {
+                    externalNeighbour = new ArrayList<>();
                 }
                 @SuppressWarnings("unchecked")
                 K[] externalNeighbourArray = (K[]) new Object[externalNeighbour.size()];
