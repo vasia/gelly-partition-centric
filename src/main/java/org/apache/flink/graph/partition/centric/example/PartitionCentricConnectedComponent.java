@@ -26,6 +26,7 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.partition.centric.*;
+import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,9 +75,9 @@ public class PartitionCentricConnectedComponent {
         Graph<Integer, Long, Integer> graph = Graph.fromCollection(vertices, edges, environment);
 
         PCConnectedComponents<Integer, Integer> connectedComponents = new PCConnectedComponents<>(10);
-        List<PCVertex<Integer, Long, Integer>> ret = connectedComponents.run(graph).collect();
+        List<PCVertex<Integer, Long, NullValue>> ret = connectedComponents.run(graph).collect();
 
-        for(PCVertex<Integer, Long, Integer> vertex: ret) {
+        for(PCVertex<Integer, Long, NullValue> vertex: ret) {
             System.out.printf("Vertex id: %d, value: %d%n",
                     vertex.getId(), vertex.getValue());
         }

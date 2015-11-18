@@ -23,6 +23,8 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
+import org.apache.flink.graph.utils.NullValueEdgeMapper;
+import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +38,7 @@ import java.util.*;
  * @param <EV>
  */
 public class PCConnectedComponents<K, EV> implements
-        GraphAlgorithm<K, Long, EV, DataSet<PCVertex<K, Long, EV>>> {
+        GraphAlgorithm<K, Long, EV, DataSet<PCVertex<K, Long, NullValue>>> {
 
     private int maxIteration;
 
@@ -45,14 +47,16 @@ public class PCConnectedComponents<K, EV> implements
     }
 
     @Override
-    public DataSet<PCVertex<K, Long, EV>> run(Graph<K, Long, EV> input) throws Exception {
-        PCGraph<K, Long, EV> pcGraph = PCGraph.fromGraph(input);
+    public DataSet<PCVertex<K, Long, NullValue>> run(Graph<K, Long, EV> input) throws Exception {
+        Graph<K, Long, NullValue> undirectedGraph = input.mapEdges(new NullValueEdgeMapper<K, EV>())
+                .getUndirected();
+        PCGraph<K, Long, NullValue> pcGraph = PCGraph.fromGraph(undirectedGraph);
 
-        PCGraph<K, Long, EV> result =
+        PCGraph<K, Long, NullValue> result =
                 pcGraph.runPartitionCentricIteration(
-                        new CCPartitionUpdateFunction<K, EV>(),
-                        new CCPartitionMessagingFunction<K, EV>(),
-                        new CCMessageAggregator<K, EV>(),
+                        new CCPartitionUpdateFunction<K, NullValue>(),
+                        new CCPartitionMessagingFunction<K, NullValue>(),
+                        new CCMessageAggregator<K, NullValue>(),
                         maxIteration);
 
         return result.getVertices();
