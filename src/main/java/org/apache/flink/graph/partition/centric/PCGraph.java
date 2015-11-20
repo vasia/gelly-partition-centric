@@ -35,55 +35,25 @@ import org.slf4j.LoggerFactory;
  */
 public class PCGraph<K, VV, EV> {
     private static final Logger LOG = LoggerFactory.getLogger(PCGraph.class);
+    private final Graph<K, VV, EV> graph;
 
-    private final DataSet<Vertex<K, VV>> vertices;
-    private final DataSet<Edge<K, EV>> edges;
-
-    private PCGraph(DataSet<Vertex<K, VV>> vertices, DataSet<Edge<K, EV>> edges) {
-        this.vertices = vertices;
-        this.edges = edges;
+    public PCGraph(Graph<K, VV, EV> graph) {
+        this.graph = graph;
     }
 
-    public DataSet<Vertex<K, VV>> getVertices() {
-        return vertices;
-    }
-
-    public static <K, VV, EV> PCGraph<K, VV, EV> fromGraph(final Graph<K, VV, EV> graph) {
-        DataSet<Vertex<K, VV>> graphVertices = graph.getVertices();
-        final DataSet<Edge<K, EV>> graphEdges = graph.getEdges();
-
-//        DataSet<PCVertex<K, VV, EV>> pcVertices = graphVertices.coGroup(graphEdges).where(0).equalTo(0).with(
-//                new CoGroupFunction<Vertex<K, VV>, Edge<K, EV>, PCVertex<K, VV, EV>>() {
-//                    @Override
-//                    public void coGroup(
-//                            Iterable<Vertex<K, VV>> first,
-//                            Iterable<Edge<K, EV>> second,
-//                            Collector<PCVertex<K, VV, EV>> out) throws Exception {
-//                        PCVertex<K, VV, EV> pcVertex = new PCVertex<>();
-//                        for (Vertex<K, VV> v : first) {
-//                            pcVertex.setId(v.getId());
-//                            pcVertex.setValue(v.getValue());
-//                        }
-//                        for (Edge<K, EV> e : second) {
-//                            pcVertex.putEdge(e.getTarget(), e.getValue());
-//                        }
-//                        out.collect(pcVertex);
-//                    }
-//                }
-//        );
-        return new PCGraph<>(graphVertices, graphEdges);
-    }
-
-    public<Message> PCGraph<K, VV, EV> runPartitionCentricIteration(
+    public<Message> Graph<K, VV, EV> runPartitionCentricIteration(
             PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
             PartitionMessagingFunction<K, VV, Message, EV> messagingFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
             int maximumNumOperations) {
+        DataSet<Edge<K, EV>> edges = graph.getEdges();
+        DataSet<Vertex<K, VV>> vertices = graph.getVertices();
+
         PartitionCentricIteration<K, VV, Message, EV> iteration = new PartitionCentricIteration<>(
                 updateFunction, messagingFunction, vertexUpdateFunction, maximumNumOperations, edges);
 
         DataSet<Vertex<K, VV>> updatedVertices = vertices.runOperation(iteration);
 
-        return new PCGraph<>(updatedVertices, edges);
+        return Graph.fromDataSet(updatedVertices, edges, graph.getContext());
     }
 }

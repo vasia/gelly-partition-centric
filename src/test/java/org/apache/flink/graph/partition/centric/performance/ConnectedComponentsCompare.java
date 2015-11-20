@@ -26,10 +26,8 @@ import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.library.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
-import org.apache.flink.graph.partition.centric.PCVertex;
 import org.apache.flink.graph.partition.centric.utils.GraphGenerator;
 import org.apache.flink.test.testdata.ConnectedComponentsData;
-import org.apache.flink.types.NullValue;
 
 import java.util.List;
 

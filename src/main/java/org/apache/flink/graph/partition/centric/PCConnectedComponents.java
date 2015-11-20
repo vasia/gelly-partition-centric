@@ -51,9 +51,9 @@ public class PCConnectedComponents<K, EV> implements
     public DataSet<Vertex<K, Long>> run(Graph<K, Long, EV> input) throws Exception {
         Graph<K, Long, NullValue> undirectedGraph = input.mapEdges(new NullValueEdgeMapper<K, EV>())
                 .getUndirected();
-        PCGraph<K, Long, NullValue> pcGraph = PCGraph.fromGraph(undirectedGraph);
+        PCGraph<K, Long, NullValue> pcGraph = new PCGraph<>(undirectedGraph);
 
-        PCGraph<K, Long, NullValue> result =
+        Graph<K, Long, NullValue> result =
                 pcGraph.runPartitionCentricIteration(
                         new CCPartitionUpdateFunction<K, NullValue>(),
                         new CCPartitionMessagingFunction<K, NullValue>(),

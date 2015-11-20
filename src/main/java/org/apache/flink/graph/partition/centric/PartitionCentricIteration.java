@@ -237,7 +237,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         @Override
         public void open(Configuration parameters) throws Exception {
             this.updateFunction.setCurrentStep(getIterationRuntimeContext().getSuperstepNumber());
-            LOG.debug("Starting update iteration {}", getIterationRuntimeContext().getSuperstepNumber());
         }
 
 
