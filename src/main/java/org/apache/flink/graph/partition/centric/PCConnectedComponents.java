@@ -76,16 +76,30 @@ public class PCConnectedComponents<K, EV> implements
             HashMap<K, Vertex<K, Long>> partition = new HashMap<>();
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
+            ArrayList<Edge<K, EV>> edges = new ArrayList<>();
             for (Tuple2<Vertex<K, Long>, HashMap<K, EV>> i : v) {
                 Vertex<K, Long> vertex = i.f0;
                 partition.put(vertex.getId(), vertex);
                 nodeStore.put(vertex.getId(), unionFind.makeNode(vertex.getValue()));
                 for(Map.Entry<K, EV> edge: i.f1.entrySet()) {
-                    if (!nodeStore.containsKey(edge.getKey())) {
-                        nodeStore.put(edge.getKey(), unionFind.makeNode(Long.MAX_VALUE));
+                    if (partition.containsKey(edge.getKey())) {
+                        // If we know this is an edge between internal vertices,
+                        // process the edge immediately
+                        unionFind.union(nodeStore.get(vertex.getId()),
+                                nodeStore.get(edge.getKey()));
+                    } else {
+                        // Otherwise buffer the edge
+                        edges.add(new Edge<>(vertex.getId(), edge.getKey(), edge.getValue()));
                     }
-                    unionFind.union(nodeStore.get(vertex.getId()), nodeStore.get(edge.getKey()));
                 }
+            }
+
+            // Process the buffer edge
+            for (Edge<K, EV> edge: edges) {
+                if (!nodeStore.containsKey(edge.getTarget())) {
+                    nodeStore.put(edge.getTarget(), unionFind.makeNode(Long.MAX_VALUE));
+                }
+                unionFind.union(nodeStore.get(edge.getSource()), nodeStore.get(edge.getTarget()));
             }
 
             // Group the external nodes according to their value
