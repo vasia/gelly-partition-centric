@@ -21,6 +21,7 @@ package org.apache.flink.graph.partition.centric.performance;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.library.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
@@ -50,7 +51,7 @@ public class TwitterMunmun {
                 .vertexTypes(Long.class, Long.class);
 
         PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(10);
-        algo.run(graph).writeAsCsv("out/pctwitter");
+        algo.run(graph).writeAsCsv("out/pctwitter", FileSystem.WriteMode.OVERWRITE);
 
 //        ConnectedComponents<Long, NullValue> vcAlgo = new ConnectedComponents<>(10);
 //        vcAlgo.run(graph).writeAsCsv("out/vctwitter");
