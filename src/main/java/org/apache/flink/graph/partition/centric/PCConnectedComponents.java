@@ -100,9 +100,13 @@ public class PCConnectedComponents<K, EV> implements
             }
 
             // Send messages to update nodes' value
-            for(K id: nodeStore.keySet()) {
-                Long value = unionFind.find(nodeStore.get(id)).value;
-                sendMessage(id, value);
+            for(Map.Entry<K, UnionFindNode<Long>> entry: nodeStore.entrySet()) {
+                UnionFindNode<Long> node = entry.getValue();
+                K id = entry.getKey();
+                Long componentId = unionFind.find(node).value;
+                if (!componentId.equals(node.value)) {
+                    sendMessage(id, componentId);
+                }
             }
         }
     }
