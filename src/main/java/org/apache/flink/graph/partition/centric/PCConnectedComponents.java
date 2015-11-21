@@ -72,16 +72,14 @@ public class PCConnectedComponents<K, EV> implements
 
         @Override
         public void updateVertex(Iterable<Tuple2<Vertex<K, Long>, HashMap<K, EV>>> v) throws Exception {
-            HashMap<K, Vertex<K, Long>> partition = new HashMap<>();
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
             ArrayList<Edge<K, EV>> edges = new ArrayList<>();
             for (Tuple2<Vertex<K, Long>, HashMap<K, EV>> i : v) {
                 Vertex<K, Long> vertex = i.f0;
-                partition.put(vertex.getId(), vertex);
                 nodeStore.put(vertex.getId(), unionFind.makeNode(vertex.getValue()));
                 for(Map.Entry<K, EV> edge: i.f1.entrySet()) {
-                    if (partition.containsKey(edge.getKey())) {
+                    if (nodeStore.containsKey(edge.getKey())) {
                         // If we know this is an edge between internal vertices,
                         // process the edge immediately
                         unionFind.union(nodeStore.get(vertex.getId()),
@@ -101,19 +99,10 @@ public class PCConnectedComponents<K, EV> implements
                 unionFind.union(nodeStore.get(edge.getSource()), nodeStore.get(edge.getTarget()));
             }
 
-            // Send message to external node
+            // Send messages to update nodes' value
             for(K id: nodeStore.keySet()) {
-                if (!partition.containsKey(id)) {
-                    // external node
-                    Long value = unionFind.find(nodeStore.get(id)).value;
-                    sendMessage(id, value);
-                }
-            }
-
-            // Set the value for internal vertices
-            for (Vertex<K, Long> vertex : partition.values()) {
-                UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
-                setVertexValue(vertex, unionFind.find(vNode).value);
+                Long value = unionFind.find(nodeStore.get(id)).value;
+                sendMessage(id, value);
             }
         }
     }
