@@ -35,11 +35,10 @@ import java.util.HashMap;
  * @param <Message> The type of message to send
  * @param <EV> The type of an edge's value
  */
-public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Serializable {
+public abstract class PartitionProcessFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
     protected int currentStep;
     protected Collector<Tuple2<K, Message>> collector;
-    protected boolean updated;
 
     public void init() {
     }
@@ -50,10 +49,6 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
 
     public void setCollector(Collector<Tuple2<K, Message>> collector) {
         this.collector = collector;
-    }
-
-    public void setUpdated(boolean updated) {
-        this.updated = updated;
     }
 
     /**
@@ -67,10 +62,10 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
 
     /**
      * Call this function to process the partition.
-     * If the partition is updated, call updateVertex with the new collection of vertices
      *
-     * @param inMessages The messages to the vertices of the partition
+     * @param vertices Iterable of vertices and their respective adjacency list
      * @throws Exception
      */
-    public abstract void updateVertex(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> inMessages) throws Exception;
+    public abstract void processPartition(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> vertices)
+            throws Exception;
 }

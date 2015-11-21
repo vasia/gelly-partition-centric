@@ -42,7 +42,7 @@ public class PCGraph<K, VV, EV> {
     }
 
     public<Message> Graph<K, VV, EV> runPartitionCentricIteration(
-            PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
+            PartitionProcessFunction<K, VV, Message, EV> updateFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
             int maximumNumOperations) {
         DataSet<Edge<K, EV>> edges = graph.getEdges();

@@ -55,7 +55,7 @@ public class PCConnectedComponents<K, EV> implements
 
         Graph<K, Long, NullValue> result =
                 pcGraph.runPartitionCentricIteration(
-                        new CCPartitionUpdateFunction<K, NullValue>(),
+                        new CCPartitionProcessFunction<K, NullValue>(),
                         new CCVertexUpdateFunction<K, NullValue>(),
                         maxIteration);
 
@@ -65,17 +65,17 @@ public class PCConnectedComponents<K, EV> implements
     /**
      * Partition update function
      */
-    public static final class CCPartitionUpdateFunction<K, EV> extends
-            PartitionUpdateFunction<K, Long, Long, EV> {
+    public static final class CCPartitionProcessFunction<K, EV> extends
+            PartitionProcessFunction<K, Long, Long, EV> {
         private static final long serialVersionUID = 1L;
-        private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
+        private static final Logger LOG = LoggerFactory.getLogger(CCPartitionProcessFunction.class);
 
         @Override
-        public void updateVertex(Iterable<Tuple2<Vertex<K, Long>, HashMap<K, EV>>> v) throws Exception {
+        public void processPartition(Iterable<Tuple2<Vertex<K, Long>, HashMap<K, EV>>> vertices) throws Exception {
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
             ArrayList<Edge<K, EV>> edges = new ArrayList<>();
-            for (Tuple2<Vertex<K, Long>, HashMap<K, EV>> i : v) {
+            for (Tuple2<Vertex<K, Long>, HashMap<K, EV>> i : vertices) {
                 Vertex<K, Long> vertex = i.f0;
                 nodeStore.put(vertex.getId(), unionFind.makeNode(vertex.getValue()));
                 for(Map.Entry<K, EV> edge: i.f1.entrySet()) {

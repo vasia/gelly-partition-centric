@@ -50,7 +50,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
     private static final Logger LOG = LoggerFactory.getLogger(PartitionCentricIteration.class);
 
-    private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
+    private final PartitionProcessFunction<K, VV, Message, EV> partitionProcessFunction;
 
     private final VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction;
 
@@ -62,14 +62,14 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
     private final DataSet<Edge<K, EV>> edges;
 
     public PartitionCentricIteration(
-            PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
+            PartitionProcessFunction<K, VV, Message, EV> partitionProcessFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
             int maxIteration, DataSet<Edge<K, EV>> edges) {
-        this.updateFunction = updateFunction;
+        this.partitionProcessFunction = partitionProcessFunction;
         this.vertexUpdateFunction = vertexUpdateFunction;
         this.maxIteration = maxIteration;
         this.edges = edges;
-        this.messageType = getMessageType(updateFunction);
+        this.messageType = getMessageType(partitionProcessFunction);
     }
 
     @Override
@@ -89,7 +89,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         // Start the iteration
         DeltaIteration<Vertex<K, VV>, Vertex<K, VV>> iteration =
                 initialVertices.iterateDelta(initialVertices, maxIteration, 0);
-        iteration.name("Partition-centric iteration (" + updateFunction + " | " + vertexUpdateFunction + ")");
+        iteration.name("Partition-centric iteration (" + partitionProcessFunction + " | " + vertexUpdateFunction + ")");
 
         // Join the edges into the vertices
         CoGroupOperator<?, ?, Tuple2<Vertex<K, VV>, HashMap<K, EV>>> vertexEdges =
@@ -98,7 +98,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
         // Update the partition, receive a dataset of message
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
-                new PartitionUpdateUdf<>(updateFunction, messageTypeInfo);
+                new PartitionUpdateUdf<>(partitionProcessFunction, messageTypeInfo);
         DataSet<Tuple2<K, Message>> messages =
                 vertexEdges.mapPartition(partitionUpdater);
 
@@ -112,8 +112,8 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         return iteration.closeWith(updatedVertices, updatedVertices);
     }
 
-    private TypeInformation<Message> getMessageType(PartitionUpdateFunction<K, VV, Message, EV> puf) {
-        return TypeExtractor.createTypeInfo(PartitionUpdateFunction.class, puf.getClass(), 2, null, null);
+    private TypeInformation<Message> getMessageType(PartitionProcessFunction<K, VV, Message, EV> puf) {
+        return TypeExtractor.createTypeInfo(PartitionProcessFunction.class, puf.getClass(), 2, null, null);
     }
 
     /**
@@ -130,11 +130,11 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             ResultTypeQueryable<Tuple2<K, Message>> {
         private static final long serialVersionUID = 1L;
 
-        private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
+        private final PartitionProcessFunction<K, VV, Message, EV> updateFunction;
         private transient TypeInformation<Tuple2<K, Message>> resultType;
 
         private PartitionUpdateUdf(
-                PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
+                PartitionProcessFunction<K, VV, Message, EV> updateFunction,
                 TypeInformation<Tuple2<K, Message>> resultType) {
             this.updateFunction = updateFunction;
             this.resultType = resultType;
@@ -152,7 +152,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         public void mapPartition(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> values,
                                  Collector<Tuple2<K, Message>> out) throws Exception {
             updateFunction.setCollector(out);
-            updateFunction.updateVertex(values);
+            updateFunction.processPartition(values);
         }
 
         @Override
