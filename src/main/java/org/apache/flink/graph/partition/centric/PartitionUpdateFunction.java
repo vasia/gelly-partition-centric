@@ -38,14 +38,19 @@ import java.util.HashMap;
 public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
     protected int currentStep;
-    protected Collector<Tuple2<Vertex<K, VV>, K[]>> collector;
+    protected Collector<PartitionUpdateOutputBean<K, VV, Message>> collector;
     protected boolean updated;
+    private PartitionUpdateOutputBean<K, VV, Message> output;
+
+    public void init() {
+        output = new PartitionUpdateOutputBean<>();
+    }
 
     public void setCurrentStep(int currentStep) {
         this.currentStep = currentStep;
     }
 
-    public void setCollector(Collector<Tuple2<Vertex<K, VV>, K[]>> collector) {
+    public void setCollector(Collector<PartitionUpdateOutputBean<K, VV, Message>> collector) {
         this.collector = collector;
     }
 
@@ -54,12 +59,26 @@ public abstract class PartitionUpdateFunction<K, VV, Message, EV> implements Ser
     }
 
     /**
-     * Call this to update a vertex
+     * Call this method to set a vertex value.
+     * This method should only be called once per vertex.
      *
-     * @param vertex
+     * @param vertex The vertex to be updated
+     * @param value The new value of the vertex
      */
-    protected void updateVertex(Vertex<K, VV> vertex, K[] external) {
-        collector.collect(new Tuple2<>(vertex, external));
+    protected void setVertexValue(Vertex<K, VV> vertex, VV value) {
+        vertex.setValue(value);
+        output.setVertex(vertex);
+        collector.collect(output);
+    }
+
+    /**
+     * Call this method to send a message to a vertex
+     * @param vertex The destination vertex's id
+     * @param message The message content
+     */
+    protected void sendMessage(K vertex, Message message) {
+        output.setMessage(new Tuple2<>(vertex, message));
+        collector.collect(output);
     }
 
     /**

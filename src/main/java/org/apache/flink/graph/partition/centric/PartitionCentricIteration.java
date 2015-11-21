@@ -37,8 +37,6 @@ import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.GenericArrayType;
-import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Iterator;
 
@@ -57,8 +55,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
     private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
 
-    private final PartitionMessagingFunction<K, VV, Message, EV> messagingFunction;
-
     private final VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction;
 
     private final int maxIteration;
@@ -70,15 +66,13 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
     public PartitionCentricIteration(
             PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
-            PartitionMessagingFunction<K, VV, Message, EV> messagingFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
             int maxIteration, DataSet<Edge<K, EV>> edges) {
         this.updateFunction = updateFunction;
-        this.messagingFunction = messagingFunction;
         this.vertexUpdateFunction = vertexUpdateFunction;
         this.maxIteration = maxIteration;
         this.edges = edges;
-        this.messageType = getMessageType(messagingFunction);
+        this.messageType = getMessageType(updateFunction);
     }
 
     @Override
@@ -93,25 +87,16 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
         TypeInformation<Vertex<K, VV>> vertexType = initialVertices.getType();
         TypeInformation<K> keyType = ((TupleTypeInfo<?>) vertexType).getTypeAt(0);
+        TypeInformation<Tuple2<K, Message>> messageTypeInfo = new TupleTypeInfo<>(keyType, messageType);
 
         @SuppressWarnings("unchecked")
-        TypeInformation<K[]> neighbourListType = (TypeInformation<K[]>) TypeExtractor.createTypeInfo(
-                new GenericArrayType() {
-                    @SuppressWarnings("unchecked")
-                    K object = (K) new Object();
-                    @Override
-                    public Type getGenericComponentType() {
-                        return object.getClass();
-                    }
-                }
-        );
-        TypeInformation<Tuple2<Vertex<K, VV>, K[]>> puType =
-                new TupleTypeInfo<>(initialVertices.getType(), neighbourListType);
+        TypeInformation<PartitionUpdateOutputBean<K, VV, Message>> puType =
+                (TypeInformation<PartitionUpdateOutputBean<K, VV, Message>>) TypeExtractor.createTypeInfo(PartitionUpdateOutputBean.class);
 
         // Start the iteration
         IterativeDataSet<Vertex<K, VV>> iteration =
                 initialVertices.iterate(maxIteration);
-        iteration.name("Partition-centric iteration (" + updateFunction + " | " + messagingFunction + ")");
+        iteration.name("Partition-centric iteration (" + updateFunction + " | " + vertexUpdateFunction + ")");
 
         // Join the edges into the vertices
         CoGroupOperator<?, ?, Tuple2<Vertex<K, VV>, HashMap<K, EV>>> vertexEdges =
@@ -120,20 +105,18 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         // Update the partition
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
                 new PartitionUpdateUdf<>(updateFunction, puType);
-        DataSet<Tuple2<Vertex<K, VV>, K[]>> partitionOutput =
+        DataSet<PartitionUpdateOutputBean<K, VV, Message>> partitionOutput =
                 vertexEdges.mapPartition(partitionUpdater);
 
-        DataSet<Vertex<K, VV>> updatedVertices = partitionOutput.map(new MapFunction<Tuple2<Vertex<K, VV>, K[]>, Vertex<K, VV>>() {
-            @Override
-            public Vertex<K, VV> map(Tuple2<Vertex<K, VV>, K[]> value) throws Exception {
-                return value.f0;
-            }
-        });
+        // Rebuild the graph from the partition output result.
+        DataSet<Vertex<K, VV>> updatedVertices = partitionOutput.flatMap(
+                new GraphRebuilder<K, VV, Message>(initialVertices.getType())
+        );
 
         // Build the messages to pass to each vertex
-        TypeInformation<Tuple2<K, Message>> messageTypeInfo = new TupleTypeInfo<>(keyType, messageType);
-        MessagingUdf<K, VV, Message, EV> messenger = new MessagingUdf<>(messagingFunction, messageTypeInfo);
-        FlatMapOperator<?, Tuple2<K, Message>> messages = partitionOutput.flatMap(messenger);
+        FlatMapOperator<?, Tuple2<K, Message>> messages = partitionOutput.flatMap(
+                new MessagingUdf<K, VV, Message>(messageTypeInfo)
+        );
 
         // Send the message to the vertex for updating
         DataSet<Tuple2<Vertex<K, VV>, Boolean>> newGraph = messages.coGroup(updatedVertices)
@@ -160,8 +143,8 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         return iteration.closeWith(updatedVertices, graphDelta);
     }
 
-    private TypeInformation<Message> getMessageType(PartitionMessagingFunction<K, VV, Message, EV> mf) {
-        return TypeExtractor.createTypeInfo(PartitionMessagingFunction.class, mf.getClass(), 2, null, null);
+    private TypeInformation<Message> getMessageType(PartitionUpdateFunction<K, VV, Message, EV> puf) {
+        return TypeExtractor.createTypeInfo(PartitionUpdateFunction.class, puf.getClass(), 2, null, null);
     }
 
     /**
@@ -170,30 +153,20 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      * @param <K>
      * @param <VV>
      * @param <Message>
-     * @param <EV>
      */
-    private static class MessagingUdf<K, VV, Message, EV> extends
-            RichFlatMapFunction<Tuple2<Vertex<K, VV>, K[]>, Tuple2<K, Message>> implements
+    private static class MessagingUdf<K, VV, Message> extends
+            RichFlatMapFunction<PartitionUpdateOutputBean<K, VV, Message>, Tuple2<K, Message>> implements
             ResultTypeQueryable<Tuple2<K, Message>> {
         private static final long serialVersionUID = 1L;
 
-        final PartitionMessagingFunction<K, VV, Message, EV> messagingFunction;
-
         private transient TypeInformation<Tuple2<K, Message>> messageType;
 
-        public MessagingUdf(PartitionMessagingFunction<K, VV, Message, EV> messagingFunction,
-                            TypeInformation<Tuple2<K, Message>> messageTypeInfo) {
-            this.messagingFunction = messagingFunction;
+        public MessagingUdf(TypeInformation<Tuple2<K, Message>> messageTypeInfo) {
             this.messageType = messageTypeInfo;
         }
 
         @Override
         public void open(Configuration parameters) throws Exception {
-            int currentStep = getIterationRuntimeContext().getSuperstepNumber();
-            if (currentStep == 1) {
-                this.messagingFunction.init();
-            }
-            this.messagingFunction.setCurrentStep(currentStep);
         }
 
         @Override
@@ -202,11 +175,10 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
 
         @Override
-        public void flatMap(Tuple2<Vertex<K, VV>, K[]> value, Collector<Tuple2<K, Message>> out)
-                throws Exception {
-            messagingFunction.setCollector(out);
-            messagingFunction.setSourceVertex(value.f0);
-            messagingFunction.sendMessages(value.f1);
+        public void flatMap(PartitionUpdateOutputBean<K, VV, Message> value, Collector<Tuple2<K, Message>> out) throws Exception {
+            if (!value.isVertex()) {
+                out.collect(value.getMessage());
+            }
         }
     }
 
@@ -220,35 +192,37 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      */
     private static class PartitionUpdateUdf<K, VV, EV, Message> extends RichMapPartitionFunction<
             Tuple2<Vertex<K, VV>, HashMap<K, EV>>,
-            Tuple2<Vertex<K, VV>, K[]>> implements
-            ResultTypeQueryable<Tuple2<Vertex<K, VV>, K[]>> {
+            PartitionUpdateOutputBean<K, VV, Message>> implements
+            ResultTypeQueryable<PartitionUpdateOutputBean<K, VV, Message>> {
         private static final long serialVersionUID = 1L;
 
         private final PartitionUpdateFunction<K, VV, Message, EV> updateFunction;
-        private transient TypeInformation<Tuple2<Vertex<K, VV>, K[]>> resultType;
+        private transient TypeInformation<PartitionUpdateOutputBean<K, VV, Message>> resultType;
 
         private PartitionUpdateUdf(
                 PartitionUpdateFunction<K, VV, Message, EV> updateFunction,
-                TypeInformation<Tuple2<Vertex<K, VV>, K[]>> resultType) {
+                TypeInformation<PartitionUpdateOutputBean<K, VV, Message>> resultType) {
             this.updateFunction = updateFunction;
             this.resultType = resultType;
         }
 
         @Override
         public void open(Configuration parameters) throws Exception {
+            if (getIterationRuntimeContext().getSuperstepNumber() == 1) {
+                this.updateFunction.init();
+            }
             this.updateFunction.setCurrentStep(getIterationRuntimeContext().getSuperstepNumber());
         }
 
-
         @Override
         public void mapPartition(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> values,
-                                 Collector<Tuple2<Vertex<K, VV>, K[]>> out) throws Exception {
+                                 Collector<PartitionUpdateOutputBean<K, VV, Message>> out) throws Exception {
             updateFunction.setCollector(out);
             updateFunction.updateVertex(values);
         }
 
         @Override
-        public TypeInformation<Tuple2<Vertex<K, VV>, K[]>> getProducedType() {
+        public TypeInformation<PartitionUpdateOutputBean<K, VV, Message>> getProducedType() {
             return resultType;
         }
     }
@@ -292,6 +266,28 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                 }
                 out.collect(new Tuple2<>(vertex, adjacencyList));
             }
+        }
+    }
+
+    private static class GraphRebuilder<K, VV, Message> extends
+            RichFlatMapFunction<PartitionUpdateOutputBean<K, VV, Message>, Vertex<K, VV>> implements
+            ResultTypeQueryable<Vertex<K, VV>>{
+        private final TypeInformation<Vertex<K, VV>> resultType;
+
+        private GraphRebuilder(TypeInformation<Vertex<K, VV>> resultType) {
+            this.resultType = resultType;
+        }
+
+        @Override
+        public void flatMap(PartitionUpdateOutputBean<K, VV, Message> value, Collector<Vertex<K, VV>> out) throws Exception {
+            if (value.isVertex()) {
+                out.collect(value.getVertex());
+            }
+        }
+
+        @Override
+        public TypeInformation<Vertex<K, VV>> getProducedType() {
+            return resultType;
         }
     }
 }

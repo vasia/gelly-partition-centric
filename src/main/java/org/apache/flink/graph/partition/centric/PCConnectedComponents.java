@@ -56,8 +56,7 @@ public class PCConnectedComponents<K, EV> implements
         Graph<K, Long, NullValue> result =
                 pcGraph.runPartitionCentricIteration(
                         new CCPartitionUpdateFunction<K, NullValue>(),
-                        new CCPartitionMessagingFunction<K, NullValue>(),
-                        new CCMessageAggregator<K, NullValue>(),
+                        new CCVertexUpdateFunction<K, NullValue>(),
                         maxIteration);
 
         return result.getVertices();
@@ -102,55 +101,24 @@ public class PCConnectedComponents<K, EV> implements
                 unionFind.union(nodeStore.get(edge.getSource()), nodeStore.get(edge.getTarget()));
             }
 
-            // Group the external nodes according to their value
-            Map<Long, ArrayList<K>> outgoing = new HashMap<>();
+            // Send message to external node
             for(K id: nodeStore.keySet()) {
                 if (!partition.containsKey(id)) {
                     // external node
                     Long value = unionFind.find(nodeStore.get(id)).value;
-                    if (!outgoing.containsKey(value)) {
-                        outgoing.put(value, new ArrayList<K>());
-                    }
-                    outgoing.get(value).add(id);
+                    sendMessage(id, value);
                 }
             }
 
+            // Set the value for internal vertices
             for (Vertex<K, Long> vertex : partition.values()) {
                 UnionFindNode<Long> vNode = nodeStore.get(vertex.getId());
-                vertex.setValue(unionFind.find(vNode).value);
-                ArrayList<K> externalNeighbour;
-                if (outgoing.containsKey(vertex.getValue())) {
-                    // This node will take responsibility to send its value to all external nodes
-                    // that has the same value as itself
-                    externalNeighbour = outgoing.get(vertex.getValue());
-                    outgoing.remove(vertex.getValue());
-                } else {
-                    externalNeighbour = new ArrayList<>();
-                }
-                @SuppressWarnings("unchecked")
-                K[] externalNeighbourArray = (K[]) new Object[externalNeighbour.size()];
-                externalNeighbour.toArray(externalNeighbourArray);
-                updateVertex(vertex, externalNeighbourArray);
+                setVertexValue(vertex, unionFind.find(vNode).value);
             }
         }
     }
 
-    /**
-     * Partition messaging function
-     */
-    public static class CCPartitionMessagingFunction<K, EV> extends PartitionMessagingFunction<K, Long, Long, EV> {
-        private static final long serialVersionUID = 1L;
-        private static final Logger LOG = LoggerFactory.getLogger(CCPartitionUpdateFunction.class);
-
-        @Override
-        public void sendMessages(K[] external) {
-            for (K vertex : external) {
-                sendMessageTo(vertex, sourceVertex.getValue());
-            }
-        }
-    }
-
-    public static class CCMessageAggregator<K, EV> extends VertexUpdateFunction<K, Long, Long, EV> {
+    public static class CCVertexUpdateFunction<K, EV> extends VertexUpdateFunction<K, Long, Long, EV> {
 
         @Override
         public void updateVertex(Iterable<Tuple2<K, Long>> message) {
