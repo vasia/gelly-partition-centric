@@ -21,7 +21,6 @@ package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
@@ -74,29 +73,39 @@ public class PCConnectedComponents<K, EV> implements
         public void processPartition(Iterable<Tuple2<Vertex<K, Long>, HashMap<K, EV>>> vertices) throws Exception {
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
-            ArrayList<Edge<K, EV>> edges = new ArrayList<>();
             for (Tuple2<Vertex<K, Long>, HashMap<K, EV>> i : vertices) {
                 Vertex<K, Long> vertex = i.f0;
-                nodeStore.put(vertex.getId(), unionFind.makeNode(vertex.getValue()));
-                for(Map.Entry<K, EV> edge: i.f1.entrySet()) {
-                    if (nodeStore.containsKey(edge.getKey())) {
-                        // If we know this is an edge between internal vertices,
-                        // process the edge immediately
-                        unionFind.union(nodeStore.get(vertex.getId()),
-                                nodeStore.get(edge.getKey()));
-                    } else {
-                        // Otherwise buffer the edge
-                        edges.add(new Edge<>(vertex.getId(), edge.getKey(), edge.getValue()));
+                UnionFindNode<Long> node;
+                if (nodeStore.containsKey(vertex.getId())) {
+                    // This vertex has been inserted as an external node,
+                    // update its initial value
+                    node = nodeStore.get(vertex.getId());
+                    node.initialValue = vertex.getValue();
+                    // Find the root and update its value if needed
+                    UnionFindNode<Long> root = unionFind.find(node);
+                    if (root.value > vertex.getValue()) {
+                        root.value = vertex.getValue();
                     }
+                } else {
+                    // New vertex
+                    node = unionFind.makeNode(vertex.getValue());
+                    nodeStore.put(vertex.getId(), node);
                 }
-            }
 
-            // Process the buffer edge
-            for (Edge<K, EV> edge: edges) {
-                if (!nodeStore.containsKey(edge.getTarget())) {
-                    nodeStore.put(edge.getTarget(), unionFind.makeNode(Long.MAX_VALUE));
+                for(Map.Entry<K, EV> edge: i.f1.entrySet()) {
+                    // The other end of the edge
+                    UnionFindNode<Long> otherNode;
+                    if (nodeStore.containsKey(edge.getKey())) {
+                        // Internal node
+                        otherNode = nodeStore.get(edge.getKey());
+                    } else {
+                        // Probably an external node, insert with the maximum component id
+                        otherNode = unionFind.makeNode(Long.MAX_VALUE);
+                        nodeStore.put(edge.getKey(), otherNode);
+                    }
+                    // Add the node to the union
+                    unionFind.union(node, otherNode);
                 }
-                unionFind.union(nodeStore.get(edge.getSource()), nodeStore.get(edge.getTarget()));
             }
 
             // Send messages to update nodes' value
