@@ -50,12 +50,18 @@ public class TwitterMunmun {
                 .ignoreCommentsEdges("%")
                 .vertexTypes(Long.class, Long.class);
 
-        PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(10);
+        PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(Integer.MAX_VALUE);
         algo.run(graph).writeAsCsv("out/pctwitter", FileSystem.WriteMode.OVERWRITE);
 
-//        ConnectedComponents<Long, NullValue> vcAlgo = new ConnectedComponents<>(10);
-//        vcAlgo.run(graph).writeAsCsv("out/vctwitter");
-
+        long start = System.currentTimeMillis();
         environment.execute();
+        System.out.printf("Elapsed time: %d ms%n", System.currentTimeMillis() - start);
+
+        ConnectedComponents<Long, NullValue> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
+        vcAlgo.run(graph).writeAsCsv("out/vctwitter", FileSystem.WriteMode.OVERWRITE);
+
+        start = System.currentTimeMillis();
+        environment.execute();
+        System.out.printf("Elapsed time: %d ms%n", System.currentTimeMillis() - start);
     }
 }
