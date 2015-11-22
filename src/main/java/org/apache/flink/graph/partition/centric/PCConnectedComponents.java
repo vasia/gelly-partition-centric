@@ -104,7 +104,7 @@ public class PCConnectedComponents<K, EV> implements
                 UnionFindNode<Long> node = entry.getValue();
                 K id = entry.getKey();
                 Long componentId = unionFind.find(node).value;
-                if (!componentId.equals(node.value)) {
+                if (!componentId.equals(node.initialValue)) {
                     sendMessage(id, componentId);
                 }
             }
@@ -129,7 +129,7 @@ public class PCConnectedComponents<K, EV> implements
 
     private static class UnionFind<K extends Comparable<K>> {
         public UnionFindNode<K> makeNode(K value) {
-            UnionFindNode<K> node = new UnionFindNode<>(value);
+            UnionFindNode<K> node = new UnionFindNode<>(value, 0);
             node.parent = node;
             return node;
         }
@@ -140,10 +140,26 @@ public class PCConnectedComponents<K, EV> implements
             if (leftRoot.equals(rightRoot)) {
                 return;
             }
-            if (leftRoot.value.compareTo(rightRoot.value) > 0) {
+
+            if (leftRoot.rank < rightRoot.rank) {
                 leftRoot.parent = rightRoot;
+                // The smaller value should be the component id
+                if (leftRoot.value.compareTo(rightRoot.value) < 0) {
+                    rightRoot.value = leftRoot.value;
+                }
+            } else if (leftRoot.rank > rightRoot.rank){
+                rightRoot.parent = leftRoot;
+                // The smaller value should be the component id
+                if (leftRoot.value.compareTo(rightRoot.value) > 0) {
+                    leftRoot.value = rightRoot.value;
+                }
             } else {
                 rightRoot.parent = leftRoot;
+                leftRoot.rank += 1;
+                // The smaller value should be the component id
+                if (leftRoot.value.compareTo(rightRoot.value) > 0) {
+                    leftRoot.value = rightRoot.value;
+                }
             }
         }
 
@@ -157,10 +173,14 @@ public class PCConnectedComponents<K, EV> implements
 
     private static class UnionFindNode<K extends Comparable<K>> {
         K value;
+        K initialValue;
+        int rank;
         UnionFindNode<K> parent;
 
-        public UnionFindNode(K value) {
+        public UnionFindNode(K value, int rank) {
             this.value = value;
+            this.initialValue = value;
+            this.rank = rank;
         }
     }
 }
