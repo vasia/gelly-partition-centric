@@ -20,6 +20,7 @@
 package org.apache.flink.graph.partition.centric;
 
 
+import org.apache.flink.api.common.functions.IterationRuntimeContext;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
@@ -37,14 +38,11 @@ import java.util.HashMap;
  */
 public abstract class PartitionProcessFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
-    protected int currentStep;
     protected Collector<Tuple2<K, Message>> collector;
+    protected transient IterationRuntimeContext context;
 
-    public void init() {
-    }
-
-    public void setCurrentStep(int currentStep) {
-        this.currentStep = currentStep;
+    public void init(IterationRuntimeContext context) {
+        this.context = context;
     }
 
     public void setCollector(Collector<Tuple2<K, Message>> collector) {

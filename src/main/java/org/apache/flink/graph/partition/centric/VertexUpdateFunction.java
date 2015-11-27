@@ -19,9 +19,9 @@
 
 package org.apache.flink.graph.partition.centric;
 
+import org.apache.flink.api.common.functions.IterationRuntimeContext;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
 
@@ -35,6 +35,11 @@ public abstract class VertexUpdateFunction<K, VV, Message, EV> implements Serial
     protected Vertex<K, VV> vertex;
     private boolean updated;
     public abstract void updateVertex(Iterable<Tuple2<K, Message>> message);
+    protected transient IterationRuntimeContext context;
+
+    public void init(IterationRuntimeContext context) {
+        this.context = context;
+    }
 
     public void setVertexValue(VV value) {
         updated = true;

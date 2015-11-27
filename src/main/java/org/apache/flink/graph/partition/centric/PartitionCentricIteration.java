@@ -19,10 +19,15 @@
 
 package org.apache.flink.graph.partition.centric;
 
-import org.apache.flink.api.common.functions.*;
+import org.apache.flink.api.common.accumulators.Accumulator;
+import org.apache.flink.api.common.aggregators.Aggregator;
+import org.apache.flink.api.common.functions.RichCoGroupFunction;
+import org.apache.flink.api.common.functions.RichMapPartitionFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.operators.*;
+import org.apache.flink.api.java.operators.CoGroupOperator;
+import org.apache.flink.api.java.operators.CustomUnaryOperation;
+import org.apache.flink.api.java.operators.DeltaIteration;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
@@ -36,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
 /**
  * Implementation of partition centric iteration
@@ -58,16 +64,20 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
     private final TypeInformation<Message> messageType;
 
+    private final PartitionCentricConfiguration configuration;
+
     private DataSet<Vertex<K, VV>> initialVertices;
     private final DataSet<Edge<K, EV>> edges;
 
     public PartitionCentricIteration(
             PartitionProcessFunction<K, VV, Message, EV> partitionProcessFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
-            int maxIteration, DataSet<Edge<K, EV>> edges) {
+            int maxIteration,
+            DataSet<Edge<K, EV>> edges, PartitionCentricConfiguration configuration) {
         this.partitionProcessFunction = partitionProcessFunction;
         this.vertexUpdateFunction = vertexUpdateFunction;
         this.maxIteration = maxIteration;
+        this.configuration = configuration;
         this.edges = edges;
         this.messageType = getMessageType(partitionProcessFunction);
     }
@@ -89,7 +99,18 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         // Start the iteration
         DeltaIteration<Vertex<K, VV>, Vertex<K, VV>> iteration =
                 initialVertices.iterateDelta(initialVertices, maxIteration, 0);
-        iteration.name("Partition-centric iteration (" + partitionProcessFunction + " | " + vertexUpdateFunction + ")");
+        String defaultName = "Partition-centric iteration (" + partitionProcessFunction + " | " + vertexUpdateFunction + ")";
+        HashMap<String, Accumulator<?, ?>> accumulators = null;
+        if (configuration != null) {
+            iteration.name(configuration.getName(defaultName));
+            // Register aggregator for per-iteration statistic
+            for(Map.Entry<String, Aggregator<?>> entry: configuration.getAggregators().entrySet()) {
+                iteration.registerAggregator(entry.getKey(), entry.getValue());
+            }
+            accumulators = configuration.getAccumulators();
+        } else {
+            iteration.name(defaultName);
+        }
 
         // Join the edges into the vertices
         CoGroupOperator<?, ?, Tuple2<Vertex<K, VV>, HashMap<K, EV>>> vertexEdges =
@@ -98,7 +119,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
         // Update the partition, receive a dataset of message
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
-                new PartitionUpdateUdf<>(partitionProcessFunction, messageTypeInfo);
+                new PartitionUpdateUdf<>(partitionProcessFunction, messageTypeInfo, accumulators);
         DataSet<Tuple2<K, Message>> messages =
                 vertexEdges.mapPartition(partitionUpdater);
 
@@ -106,7 +127,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         DataSet<Vertex<K, VV>> updatedVertices =
                 messages.coGroup(iteration.getSolutionSet())
                         .where(0).equalTo(0)
-                        .with(new VertexUpdateUdf<>(vertexUpdateFunction));
+                        .with(new VertexUpdateUdf<>(vertexUpdateFunction, accumulators));
 
         // Finish iteration
         return iteration.closeWith(updatedVertices, updatedVertices);
@@ -132,20 +153,27 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
         private final PartitionProcessFunction<K, VV, Message, EV> updateFunction;
         private transient TypeInformation<Tuple2<K, Message>> resultType;
+        private final HashMap<String, Accumulator<?, ?>> accumulators;
 
         private PartitionUpdateUdf(
                 PartitionProcessFunction<K, VV, Message, EV> updateFunction,
-                TypeInformation<Tuple2<K, Message>> resultType) {
+                TypeInformation<Tuple2<K, Message>> resultType,
+                HashMap<String, Accumulator<?, ?>> accumulators) {
             this.updateFunction = updateFunction;
             this.resultType = resultType;
+            this.accumulators = accumulators;
         }
 
         @Override
         public void open(Configuration parameters) throws Exception {
             if (getIterationRuntimeContext().getSuperstepNumber() == 1) {
-                this.updateFunction.init();
+                this.updateFunction.init(getIterationRuntimeContext());
             }
-            this.updateFunction.setCurrentStep(getIterationRuntimeContext().getSuperstepNumber());
+            if (accumulators != null) {
+                for(Map.Entry<String, Accumulator<?, ?>> entry: accumulators.entrySet()) {
+                    getRuntimeContext().addAccumulator(entry.getKey(), entry.getValue());
+                }
+            }
         }
 
         @Override
@@ -174,9 +202,25 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                     Tuple2<K, Message>, Vertex<K, VV>,
                     Vertex<K, VV>> {
         private final VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction;
+        private final HashMap<String, Accumulator<?, ?>> accumulators;
 
-        private VertexUpdateUdf(VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction) {
+        private VertexUpdateUdf(
+                VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
+                HashMap<String, Accumulator<?, ?>> accumulators) {
             this.vertexUpdateFunction = vertexUpdateFunction;
+            this.accumulators = accumulators;
+        }
+
+        @Override
+        public void open(Configuration parameters) throws Exception {
+            if (getIterationRuntimeContext().getSuperstepNumber() == 1) {
+                this.vertexUpdateFunction.init(getIterationRuntimeContext());
+            }
+            if (accumulators != null) {
+                for(Map.Entry<String, Accumulator<?, ?>> entry: accumulators.entrySet()) {
+                    getRuntimeContext().addAccumulator(entry.getKey(), entry.getValue());
+                }
+            }
         }
 
         @Override

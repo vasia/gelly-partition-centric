@@ -29,7 +29,8 @@ import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Connected components algorithm implemented using partition centric iteration
@@ -41,9 +42,16 @@ public class PCConnectedComponents<K, EV> implements
         GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
 
     private int maxIteration;
+    private final PartitionCentricConfiguration configuration;
 
     public PCConnectedComponents(int maxIteration) {
         this.maxIteration = maxIteration;
+        this.configuration = null;
+    }
+
+    public PCConnectedComponents(int maxIteration, PartitionCentricConfiguration configuration) {
+        this.maxIteration = maxIteration;
+        this.configuration = configuration;
     }
 
     @Override
@@ -56,7 +64,7 @@ public class PCConnectedComponents<K, EV> implements
                 pcGraph.runPartitionCentricIteration(
                         new CCPartitionProcessFunction<K, NullValue>(),
                         new CCVertexUpdateFunction<K, NullValue>(),
-                        maxIteration);
+                        configuration, maxIteration);
 
         return result.getVertices();
     }

@@ -44,12 +44,13 @@ public class PCGraph<K, VV, EV> {
     public<Message> Graph<K, VV, EV> runPartitionCentricIteration(
             PartitionProcessFunction<K, VV, Message, EV> updateFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
+            PartitionCentricConfiguration configuration,
             int maximumNumOperations) {
         DataSet<Edge<K, EV>> edges = graph.getEdges();
         DataSet<Vertex<K, VV>> vertices = graph.getVertices();
 
         PartitionCentricIteration<K, VV, Message, EV> iteration = new PartitionCentricIteration<>(
-                updateFunction, vertexUpdateFunction, maximumNumOperations, edges);
+                updateFunction, vertexUpdateFunction, maximumNumOperations, edges, configuration);
 
         DataSet<Vertex<K, VV>> updatedVertices = vertices.runOperation(iteration);
 
