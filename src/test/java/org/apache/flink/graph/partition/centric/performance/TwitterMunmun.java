@@ -19,13 +19,20 @@
 
 package org.apache.flink.graph.partition.centric.performance;
 
+import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.library.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
+import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
+import org.apache.flink.graph.partition.centric.utils.Telemetry;
 import org.apache.flink.types.NullValue;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Testing the PCConnectedComponents on Twitter Munmun dataset
@@ -34,7 +41,7 @@ public class TwitterMunmun {
     public static void main(String[] args) throws Exception {
 
         ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
-//        environment.getConfig().disableSysoutLogging();
+        environment.getConfig().disableSysoutLogging();
 
         Graph<Long, Long, NullValue> graph = Graph
                 .fromCsvReader(
@@ -50,18 +57,25 @@ public class TwitterMunmun {
                 .ignoreCommentsEdges("%")
                 .vertexTypes(Long.class, Long.class);
 
-        PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(Integer.MAX_VALUE);
+        JobExecutionResult result;
+        PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
+        configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
+
+        environment.startNewSession();
+        PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(
+                Integer.MAX_VALUE, configuration);
         algo.run(graph).writeAsCsv("out/pctwitter", FileSystem.WriteMode.OVERWRITE);
+        result = environment.execute();
+        Map<String, String> fields = new HashMap<>();
+        fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Messages sent");
+        Telemetry.printTelemetry("Partition centric iteration", result, fields);
 
-        long start = System.currentTimeMillis();
-        environment.execute();
-        System.out.printf("Elapsed time: %d ms%n", System.currentTimeMillis() - start);
-
+        environment.startNewSession();
         ConnectedComponents<Long, NullValue> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
         vcAlgo.run(graph).writeAsCsv("out/vctwitter", FileSystem.WriteMode.OVERWRITE);
-
-        start = System.currentTimeMillis();
-        environment.execute();
-        System.out.printf("Elapsed time: %d ms%n", System.currentTimeMillis() - start);
+        result = environment.execute();
+        fields.clear();
+        Telemetry.printTelemetry("Vertex centric", result, fields);
     }
+
 }
