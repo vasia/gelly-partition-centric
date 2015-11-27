@@ -19,21 +19,11 @@
 
 package org.apache.flink.graph.partition.centric.performance;
 
-import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.accumulators.Histogram;
-import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
-import org.apache.flink.graph.library.ConnectedComponents;
-import org.apache.flink.graph.partition.centric.PCConnectedComponents;
-import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
-import org.apache.flink.graph.partition.centric.utils.Telemetry;
+import org.apache.flink.graph.partition.centric.utils.GraphCCRunner;
 import org.apache.flink.types.NullValue;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Testing the PCConnectedComponents on Twitter Munmun dataset
@@ -58,26 +48,6 @@ public class WebGoogle {
                 .ignoreCommentsEdges("#")
                 .vertexTypes(Long.class, Long.class);
 
-        JobExecutionResult result;
-        PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
-        configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
-        configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, new Histogram());
-
-        environment.startNewSession();
-        PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(
-                Integer.MAX_VALUE, configuration);
-        algo.run(graph).writeAsCsv("out/pcwebgoogle", FileSystem.WriteMode.OVERWRITE);
-        result = environment.execute();
-        Map<String, String> fields = new HashMap<>();
-        fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
-        fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
-        Telemetry.printTelemetry("Partition centric", result, fields);
-
-        environment.startNewSession();
-        ConnectedComponents<Long, NullValue> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
-        vcAlgo.run(graph).writeAsCsv("out/vcwebgoogle", FileSystem.WriteMode.OVERWRITE);
-        result = environment.execute();
-        fields.clear();
-        Telemetry.printTelemetry("Vertex centric", result, fields);
+        GraphCCRunner.detectComponent(environment, graph, "out/pcwebgoogle", "out/vcwebgoogle");
     }
 }
