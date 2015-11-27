@@ -19,6 +19,7 @@
 
 package org.apache.flink.graph.partition.centric;
 
+import org.apache.flink.api.common.accumulators.Histogram;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -42,7 +43,8 @@ import java.util.Map;
 public class PCConnectedComponents<K, EV> implements
         GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
 
-    public static final String MESSAGE_SENT_CTR = "message_sent";
+    public static final String MESSAGE_SENT_CTR = "long:message_sent";
+    public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
 
     private int maxIteration;
     private final PartitionCentricConfiguration configuration;
@@ -119,6 +121,7 @@ public class PCConnectedComponents<K, EV> implements
                 }
             }
 
+            Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
             LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
 
             // Send messages to update nodes' value
@@ -130,6 +133,9 @@ public class PCConnectedComponents<K, EV> implements
                     sendMessage(id, componentId);
                     if (messageCounter != null) {
                         messageCounter.add(1);
+                    }
+                    if (messageHistogram != null) {
+                        messageHistogram.add(context.getSuperstepNumber());
                     }
                 }
             }

@@ -20,6 +20,7 @@
 package org.apache.flink.graph.partition.centric.performance;
 
 import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.api.common.accumulators.Histogram;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
@@ -60,6 +61,7 @@ public class TwitterMunmun {
         JobExecutionResult result;
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
         configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
+        configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, new Histogram());
 
         environment.startNewSession();
         PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(
@@ -67,7 +69,8 @@ public class TwitterMunmun {
         algo.run(graph).writeAsCsv("out/pctwitter", FileSystem.WriteMode.OVERWRITE);
         result = environment.execute();
         Map<String, String> fields = new HashMap<>();
-        fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Messages sent");
+        fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
+        fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
         Telemetry.printTelemetry("Partition centric iteration", result, fields);
 
         environment.startNewSession();

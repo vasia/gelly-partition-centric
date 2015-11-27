@@ -20,9 +20,9 @@
 package org.apache.flink.graph.partition.centric.utils;
 
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Utilities class for Telemetry purpose
@@ -30,11 +30,20 @@ import java.util.Map;
 public class Telemetry {
     public static void printTelemetry(String name, JobExecutionResult result, Map<String, String> fields) {
         System.out.println(name);
-        for(Map.Entry<String, String> field: fields.entrySet()) {
-            System.out.printf("%s: %d%n",
-                    field.getValue(),
-                    result.<Long>getAccumulatorResult(field.getKey()));
-        }
         System.out.printf("Execution time: %s ms%n", result.getNetRuntime());
+        for(Map.Entry<String, String> field: fields.entrySet()) {
+            if (field.getKey().startsWith("long")) {
+                Long count = result.getAccumulatorResult(field.getKey());
+                System.out.printf("%s: %d%n",
+                        field.getValue(),
+                        count);
+            } else if (field.getKey().startsWith("histogram")) {
+                TreeMap<Integer, Integer> out = result.getAccumulatorResult(field.getKey());
+                for(Map.Entry<Integer, Integer> item: out.entrySet()) {
+                    System.out.printf("%s iteration %d: %d%n",
+                            field.getValue(), item.getKey(), item.getValue());
+                }
+            }
+        }
     }
 }
