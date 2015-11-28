@@ -20,6 +20,7 @@
 package org.apache.flink.graph.partition.centric.utils;
 
 import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
 
 import java.util.Map;
 import java.util.TreeMap;
@@ -32,7 +33,18 @@ public class Telemetry {
         System.out.println(name);
         System.out.printf("Execution time: %s ms%n", result.getNetRuntime());
         for(Map.Entry<String, String> field: fields.entrySet()) {
-            if (field.getKey().startsWith("long")) {
+            if (field.getKey().equals(PartitionCentricIteration.ITER_TIMER)) {
+                TreeMap<Integer, Long> out = result.getAccumulatorResult(field.getKey());
+                for (int i = 1; i <= out.size(); i++) {
+                    if (out.containsKey(i+1)) {
+                        System.out.printf("%s iteration %d: %d ms%n",
+                                field.getValue(), i, out.get(i+1) - out.get(i));
+                    } else {
+                        System.out.printf("%s iteration %d: %d ms%n",
+                                field.getValue(), i, System.currentTimeMillis() - out.get(i));
+                    }
+                }
+            } else if (field.getKey().startsWith("long")) {
                 Long count = result.getAccumulatorResult(field.getKey());
                 System.out.printf("%s: %d%n",
                         field.getValue(),

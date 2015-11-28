@@ -28,6 +28,7 @@ import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.library.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
+import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
 import org.apache.flink.types.NullValue;
 
 import java.util.HashMap;
@@ -48,6 +49,7 @@ public class GraphCCRunner {
         configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, new Histogram());
         configuration.registerAccumulator(PCConnectedComponents.ITER_CTR, new LongCounter());
         configuration.registerAccumulator(PCConnectedComponents.ACTIVE_VER_ITER_CTR, new Histogram());
+        configuration.registerAccumulator(PartitionCentricIteration.ITER_TIMER, new IterationTimer());
 
         environment.startNewSession();
         PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(
@@ -59,6 +61,7 @@ public class GraphCCRunner {
         fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
         fields.put(PCConnectedComponents.ITER_CTR, "Iteration count");
         fields.put(PCConnectedComponents.ACTIVE_VER_ITER_CTR, "Active vertices");
+        fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
         Telemetry.printTelemetry("Partition centric", result, fields);
 
         environment.startNewSession();

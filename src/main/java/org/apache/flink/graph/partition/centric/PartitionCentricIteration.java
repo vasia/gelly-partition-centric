@@ -21,6 +21,7 @@ package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.api.common.aggregators.Aggregator;
+import org.apache.flink.api.common.functions.IterationRuntimeContext;
 import org.apache.flink.api.common.functions.RichCoGroupFunction;
 import org.apache.flink.api.common.functions.RichJoinFunction;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
@@ -36,6 +37,7 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.partition.centric.utils.IterationTimer;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +45,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Implementation of partition centric iteration
@@ -54,6 +57,8 @@ import java.util.Map;
  */
 public class PartitionCentricIteration<K, VV, Message, EV> implements
         CustomUnaryOperation<Vertex<K, VV>, Vertex<K, VV>> {
+
+    public static final String ITER_TIMER = "iteration_timer_acc";
 
     private static final Logger LOG = LoggerFactory.getLogger(PartitionCentricIteration.class);
 
@@ -122,7 +127,8 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                                 new TupleTypeInfo<Tuple2<VV, Edge<K, EV>>>(
                                         ((TupleTypeInfo<?>) vertexType).getTypeAt(1),
                                         edgeType
-                                )
+                                ),
+                                accumulators
                             )
                         );
 
@@ -253,9 +259,27 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             ResultTypeQueryable<Tuple2<VV, Edge<K, EV>>>{
 
         private transient final TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType;
+        private final HashMap<String, Accumulator<?, ?>> accumulators;
 
-        private AdjacencyListBuilder(TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType) {
+        private AdjacencyListBuilder(TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType, HashMap<String, Accumulator<?, ?>> accumulators) {
             this.resultType = resultType;
+            this.accumulators = accumulators;
+        }
+
+        @Override
+        public void open(Configuration parameters) throws Exception {
+            super.open(parameters);
+            IterationRuntimeContext context = getIterationRuntimeContext();
+            if (accumulators != null) {
+                for(Map.Entry<String, Accumulator<?, ?>> entry: accumulators.entrySet()) {
+                    context.addAccumulator(entry.getKey(), entry.getValue());
+                }
+                IterationTimer timerAcc = (IterationTimer)
+                        context.<Integer, TreeMap<Integer, Long>>getAccumulator(ITER_TIMER);
+                if (timerAcc != null) {
+                    timerAcc.add(context.getSuperstepNumber());
+                }
+            }
         }
 
         @Override
