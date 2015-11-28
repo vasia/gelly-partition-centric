@@ -22,12 +22,13 @@ package org.apache.flink.graph.partition.centric;
 import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.api.common.aggregators.Aggregator;
 import org.apache.flink.api.common.functions.RichCoGroupFunction;
+import org.apache.flink.api.common.functions.RichJoinFunction;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.operators.CoGroupOperator;
 import org.apache.flink.api.java.operators.CustomUnaryOperation;
 import org.apache.flink.api.java.operators.DeltaIteration;
+import org.apache.flink.api.java.operators.JoinOperator;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
@@ -93,6 +94,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             throw new RuntimeException("Initial vertices not set");
         }
         TypeInformation<Vertex<K, VV>> vertexType = initialVertices.getType();
+        TypeInformation<Edge<K, EV>> edgeType = edges.getType();
         TypeInformation<K> keyType = ((TupleTypeInfo<?>) vertexType).getTypeAt(0);
         TypeInformation<Tuple2<K, Message>> messageTypeInfo = new TupleTypeInfo<>(keyType, messageType);
 
@@ -113,9 +115,16 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
 
         // Join the edges into the vertices
-        CoGroupOperator<?, ?, Tuple2<Vertex<K, VV>, HashMap<K, EV>>> vertexEdges =
-                iteration.getWorkset().coGroup(edges).where(0).equalTo(0)
-                        .with(new AdjacencyListBuilder<K, VV, EV>());
+        JoinOperator<?, ?, Tuple2<VV, Edge<K, EV>>> vertexEdges =
+                iteration.getWorkset().join(edges).where(0).equalTo(0)
+                        .with(
+                            new AdjacencyListBuilder<>(
+                                new TupleTypeInfo<Tuple2<VV, Edge<K, EV>>>(
+                                        ((TupleTypeInfo<?>) vertexType).getTypeAt(1),
+                                        edgeType
+                                )
+                            )
+                        );
 
         // Update the partition, receive a dataset of message
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
@@ -146,7 +155,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
      * @param <Message>
      */
     private static class PartitionUpdateUdf<K, VV, EV, Message> extends RichMapPartitionFunction<
-            Tuple2<Vertex<K, VV>, HashMap<K, EV>>,
+            Tuple2<VV, Edge<K, EV>>,
             Tuple2<K, Message>> implements
             ResultTypeQueryable<Tuple2<K, Message>> {
         private static final long serialVersionUID = 1L;
@@ -177,7 +186,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
 
         @Override
-        public void mapPartition(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> values,
+        public void mapPartition(Iterable<Tuple2<VV, Edge<K, EV>>> values,
                                  Collector<Tuple2<K, Message>> out) throws Exception {
             updateFunction.setCollector(out);
             updateFunction.processPartition(values);
@@ -240,20 +249,23 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
     }
 
     private static class AdjacencyListBuilder<K, VV, EV> extends
-            RichCoGroupFunction<Vertex<K,VV>, Edge<K,EV>, Tuple2<Vertex<K, VV>, HashMap<K, EV>>> {
+            RichJoinFunction<Vertex<K,VV>, Edge<K, EV>, Tuple2<VV, Edge<K, EV>>> implements
+            ResultTypeQueryable<Tuple2<VV, Edge<K, EV>>>{
+
+        private transient final TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType;
+
+        private AdjacencyListBuilder(TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType) {
+            this.resultType = resultType;
+        }
+
         @Override
-        public void coGroup(Iterable<Vertex<K, VV>> first,
-                            Iterable<Edge<K, EV>> second,
-                            Collector<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> out) throws Exception {
-            Iterator<Vertex<K, VV>> vertexIterator = first.iterator();
-            if (vertexIterator.hasNext()) {
-                Vertex<K, VV> vertex = vertexIterator.next();
-                HashMap<K, EV> adjacencyList = new HashMap<K, EV>();
-                for(Edge<K, EV> e: second) {
-                    adjacencyList.put(e.getTarget(), e.getValue());
-                }
-                out.collect(new Tuple2<>(vertex, adjacencyList));
-            }
+        public Tuple2<VV, Edge<K, EV>> join(Vertex<K, VV> first, Edge<K, EV> second) throws Exception {
+            return new Tuple2<>(first.getValue(), second);
+        }
+
+        @Override
+        public TypeInformation<Tuple2<VV, Edge<K, EV>>> getProducedType() {
+            return resultType;
         }
     }
 

@@ -23,6 +23,7 @@ import org.apache.flink.api.common.accumulators.Histogram;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
@@ -83,42 +84,41 @@ public class PCConnectedComponents<K, EV> implements
         private static final Logger LOG = LoggerFactory.getLogger(CCPartitionProcessFunction.class);
 
         @Override
-        public void processPartition(Iterable<Tuple2<Vertex<K, Long>, HashMap<K, EV>>> vertices) throws Exception {
+        public void processPartition(Iterable<Tuple2<Long, Edge<K, EV>>> vertices) throws Exception {
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
-            for (Tuple2<Vertex<K, Long>, HashMap<K, EV>> i : vertices) {
-                Vertex<K, Long> vertex = i.f0;
+            for (Tuple2<Long, Edge<K, EV>> i : vertices) {
+                Long sourceValue = i.f0;
+                Edge<K, EV> edge = i.f1;
                 UnionFindNode<Long> node;
-                if (nodeStore.containsKey(vertex.getId())) {
+                if (nodeStore.containsKey(edge.getSource())) {
                     // This vertex has been inserted as an external node,
                     // update its initial value
-                    node = nodeStore.get(vertex.getId());
-                    node.initialValue = vertex.getValue();
+                    node = nodeStore.get(edge.getSource());
+                    node.initialValue = sourceValue;
                     // Find the root and update its value if needed
                     UnionFindNode<Long> root = unionFind.find(node);
-                    if (root.value > vertex.getValue()) {
-                        root.value = vertex.getValue();
+                    if (root.value > sourceValue) {
+                        root.value = sourceValue;
                     }
                 } else {
                     // New vertex
-                    node = unionFind.makeNode(vertex.getValue());
-                    nodeStore.put(vertex.getId(), node);
+                    node = unionFind.makeNode(sourceValue);
+                    nodeStore.put(edge.getSource(), node);
                 }
 
-                for(Map.Entry<K, EV> edge: i.f1.entrySet()) {
-                    // The other end of the edge
-                    UnionFindNode<Long> otherNode;
-                    if (nodeStore.containsKey(edge.getKey())) {
-                        // Internal node
-                        otherNode = nodeStore.get(edge.getKey());
-                    } else {
-                        // Probably an external node, insert with the maximum component id
-                        otherNode = unionFind.makeNode(Long.MAX_VALUE);
-                        nodeStore.put(edge.getKey(), otherNode);
-                    }
-                    // Add the node to the union
-                    unionFind.union(node, otherNode);
+                // The other end of the edge
+                UnionFindNode<Long> otherNode;
+                if (nodeStore.containsKey(edge.getTarget())) {
+                    // Internal node
+                    otherNode = nodeStore.get(edge.getTarget());
+                } else {
+                    // Probably an external node, insert with the maximum component id
+                    otherNode = unionFind.makeNode(Long.MAX_VALUE);
+                    nodeStore.put(edge.getTarget(), otherNode);
                 }
+                // Add the node to the union
+                unionFind.union(node, otherNode);
             }
 
             Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);

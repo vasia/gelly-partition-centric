@@ -22,6 +22,7 @@ package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.functions.IterationRuntimeContext;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
 
@@ -64,6 +65,6 @@ public abstract class PartitionProcessFunction<K, VV, Message, EV> implements Se
      * @param vertices Iterable of vertices and their respective adjacency list
      * @throws Exception
      */
-    public abstract void processPartition(Iterable<Tuple2<Vertex<K, VV>, HashMap<K, EV>>> vertices)
+    public abstract void processPartition(Iterable<Tuple2<VV, Edge<K, EV>>> vertices)
             throws Exception;
 }
