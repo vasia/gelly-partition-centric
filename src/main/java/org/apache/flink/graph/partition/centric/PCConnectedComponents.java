@@ -46,6 +46,7 @@ public class PCConnectedComponents<K, EV> implements
 
     public static final String MESSAGE_SENT_CTR = "long:message_sent";
     public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
+    public static final String ITER_CTR = "long:iteration_counter";
 
     private int maxIteration;
     private final PartitionCentricConfiguration configuration;
@@ -123,6 +124,11 @@ public class PCConnectedComponents<K, EV> implements
 
             Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
             LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
+            LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
+
+            if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
+                iterationCounter.add(1);
+            }
 
             // Send messages to update nodes' value
             for(Map.Entry<K, UnionFindNode<Long>> entry: nodeStore.entrySet()) {
