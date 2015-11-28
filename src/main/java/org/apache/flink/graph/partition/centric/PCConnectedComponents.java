@@ -46,6 +46,7 @@ public class PCConnectedComponents<K, EV> implements
 
     public static final String MESSAGE_SENT_CTR = "long:message_sent";
     public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
+    public static final String ACTIVE_VER_ITER_CTR = "histogram:active_ver_iter_ctr";
     public static final String ITER_CTR = "long:iteration_counter";
 
     private int maxIteration;
@@ -125,6 +126,7 @@ public class PCConnectedComponents<K, EV> implements
             Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
             LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
             LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
+            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
 
             if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
                 iterationCounter.add(1);
@@ -144,6 +146,13 @@ public class PCConnectedComponents<K, EV> implements
                         messageHistogram.add(context.getSuperstepNumber());
                     }
                 }
+                // This can give the wrong number, if a vertex appears in multiple parallel partitions
+                // So we only count active vertices in the first iteration using this method
+                if (vertexHistogram != null &&
+                        node.initialValue != Long.MAX_VALUE &&
+                        context.getSuperstepNumber() == 1) {
+                    vertexHistogram.add(context.getSuperstepNumber());
+                }
             }
         }
     }
@@ -152,6 +161,7 @@ public class PCConnectedComponents<K, EV> implements
 
         @Override
         public void updateVertex(Iterable<Tuple2<K, Long>> message) {
+            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
             Long minValue = vertex.getValue();
             for(Tuple2<K, Long> l: message) {
                 if (minValue > l.f1) {
@@ -160,6 +170,10 @@ public class PCConnectedComponents<K, EV> implements
             }
             if (minValue < vertex.getValue()) {
                 setVertexValue(minValue);
+                // Counting the active vertices in the next iteration
+                if (vertexHistogram != null) {
+                    vertexHistogram.add(context.getSuperstepNumber() + 1);
+                }
             }
         }
     }

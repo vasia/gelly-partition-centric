@@ -47,6 +47,7 @@ public class GraphCCRunner {
         configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
         configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, new Histogram());
         configuration.registerAccumulator(PCConnectedComponents.ITER_CTR, new LongCounter());
+        configuration.registerAccumulator(PCConnectedComponents.ACTIVE_VER_ITER_CTR, new Histogram());
 
         environment.startNewSession();
         PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(
@@ -57,6 +58,7 @@ public class GraphCCRunner {
         fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
         fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
         fields.put(PCConnectedComponents.ITER_CTR, "Iteration count");
+        fields.put(PCConnectedComponents.ACTIVE_VER_ITER_CTR, "Active vertices");
         Telemetry.printTelemetry("Partition centric", result, fields);
 
         environment.startNewSession();
