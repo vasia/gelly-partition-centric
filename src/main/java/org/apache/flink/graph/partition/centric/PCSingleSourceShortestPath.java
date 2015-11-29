@@ -1,6 +1,7 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.accumulators.Histogram;
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
@@ -55,6 +56,10 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
         this.configuration = configuration;
     }
 
+    public K getSrcVertexId() {
+        return srcVertexId;
+    }
+
     /**
      * Run function for the partition centric SSSP algorithm
      *
@@ -64,7 +69,21 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
      */
     @Override
     public DataSet<Vertex<K, Double>> run(Graph<K, Double, EV> graph) throws Exception {
-        PCGraph<K, Double, EV> pcGraph = new PCGraph<>(graph);
+
+        //Update vertex values to 0.0 for source vertex and Double.MAX_VALUE for the rest
+        Graph<K, Double, EV> updatedGraph = graph.mapVertices(new MapFunction<Vertex<K, Double>, Double>() {
+            @Override
+            public Double map(Vertex<K, Double> vertex) throws Exception {
+                if (vertex.getId().equals(getSrcVertexId())) {
+                    return 0.0;
+                }
+                else {
+                    return Double.MAX_VALUE;
+                }
+            }
+        });
+
+        PCGraph<K, Double, EV> pcGraph = new PCGraph<>(updatedGraph);
 
         Graph<K, Double, EV> result =
                 pcGraph.runPartitionCentricIteration(
@@ -88,21 +107,19 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
 
         @Override
         public void processPartition(Iterable<Tuple2<Double, Edge<K, EV>>> vertices) throws Exception {
-            int superstepNumber = context.getSuperstepNumber();
 
             //Calculate the path length to every destination node
             for (Tuple2<Double, Edge<K, EV>> vertice : vertices) {
 
                 Double sourceValue = vertice.f0;
                 Edge<K, EV> edge = vertice.f1;
-                K sourceId = edge.getSource();
                 K targetId = edge.getTarget();
 
                 Double pathValue = sourceValue;
 
-                //If vertex value is non-negative, calculate path value.
-                //Initial vertex values should be -1.
-                if (sourceValue >= 0) {
+                //If condition true, calculate path value.
+                //Initial (non-source) vertex values are Double.MAX_VALUE.
+                if (sourceValue < Double.MAX_VALUE) {
                     EV edgeValue = edge.getValue();
                     pathValue += (Long)edgeValue;
                 }
