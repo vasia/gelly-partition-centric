@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * @param <K> Type of Vertex ID
  * @param <EV> Type of Edge value
  */
-public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
+public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Double, EV, DataSet<Vertex<K, Double>>> {
 
     public static final String MESSAGE_SENT_CTR = "long:message_sent";
     public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
@@ -31,7 +31,7 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Long
     private final PartitionCentricConfiguration configuration;
 
     /**
-     * Single Source Shortest Path algorithm single argument constructor
+     * Creates an instance of the Single Source Shortest Path algorithm - single argument constructor
      *
      * @param srcVertexId ID of the source vertex
      * @param maxIterations Maximum number of iterations of algorithm
@@ -43,7 +43,7 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Long
     }
 
     /**
-     * Single Source Shortest Path algorithm constructor
+     * Creates an instance of Single Source Shortest Path algorithm
      *
      * @param srcVertexId ID of the source vertex
      * @param maxIterations Maximum number of iterations of algorithm
@@ -63,10 +63,10 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Long
      * @throws Exception
      */
     @Override
-    public DataSet<Vertex<K, Long>> run(Graph<K, Long, EV> graph) throws Exception {
-        PCGraph<K, Long, EV> pcGraph = new PCGraph<>(graph);
+    public DataSet<Vertex<K, Double>> run(Graph<K, Double, EV> graph) throws Exception {
+        PCGraph<K, Double, EV> pcGraph = new PCGraph<>(graph);
 
-        Graph<K, Long, EV> result =
+        Graph<K, Double, EV> result =
                 pcGraph.runPartitionCentricIteration(
                         new SSSPPartitionProcessFunction<K, EV>(),
                         new SSSPVertexUpdateFunction<K, EV>(),
@@ -81,16 +81,33 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Long
      * @param <K> Type of Vertex ID
      * @param <EV> Type of Edge Value
      */
-    public static final class SSSPPartitionProcessFunction<K, EV>  extends PartitionProcessFunction<K, Long, Long, EV> {
+    public static final class SSSPPartitionProcessFunction<K, EV>  extends PartitionProcessFunction<K, Double, Double, EV> {
 
         private static final long serialVersionUID = 1L;
         private static final Logger LOG = LoggerFactory.getLogger(SSSPPartitionProcessFunction.class);
 
         @Override
-        public void processPartition(Iterable<Tuple2<Long, Edge<K, EV>>> vertices) throws Exception {
+        public void processPartition(Iterable<Tuple2<Double, Edge<K, EV>>> vertices) throws Exception {
+            int superstepNumber = context.getSuperstepNumber();
 
-            for (Tuple2<Long, Edge<K, EV>> vertice : vertices) {
+            //Calculate the path length to every destination node
+            for (Tuple2<Double, Edge<K, EV>> vertice : vertices) {
 
+                Double sourceValue = vertice.f0;
+                Edge<K, EV> edge = vertice.f1;
+                K sourceId = edge.getSource();
+                K targetId = edge.getTarget();
+
+                Double pathValue = sourceValue;
+
+                //If vertex value is non-negative, calculate path value.
+                //Initial vertex values should be -1.
+                if (sourceValue >= 0) {
+                    EV edgeValue = edge.getValue();
+                    pathValue += (Long)edgeValue;
+                }
+
+                sendMessage(targetId, pathValue);
             }
 
         }
@@ -102,15 +119,15 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Long
      * @param <K> Type of vertex ID
      * @param <EV> Type of Edge Value
      */
-    public static class SSSPVertexUpdateFunction<K, EV> extends VertexUpdateFunction<K, Long, Long, EV> {
+    public static class SSSPVertexUpdateFunction<K, EV> extends VertexUpdateFunction<K, Double, Double, EV> {
 
         @Override
-        public void updateVertex(Iterable<Tuple2<K, Long>> message) {
+        public void updateVertex(Iterable<Tuple2<K, Double>> message) {
             Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
-            Long minValue = vertex.getValue();
+            Double minValue = vertex.getValue();
 
             //find the new minimal value (from current value and message values)
-            for (Tuple2<K, Long> m : message) {
+            for (Tuple2<K, Double> m : message) {
                 if (minValue > m.f1)
                     minValue = m.f1;
             }
@@ -126,6 +143,6 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Long
             }
         }
     }
-    
+
 }
 
