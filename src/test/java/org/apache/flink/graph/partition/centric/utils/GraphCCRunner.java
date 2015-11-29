@@ -30,6 +30,8 @@ import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
 import org.apache.flink.types.NullValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -38,11 +40,36 @@ import java.util.Map;
  * Utility class to run connected component algorithm on different graph
  */
 public class GraphCCRunner {
-    public static void detectComponent(
+    private final static Logger LOG = LoggerFactory.getLogger(GraphCCRunner.class);
+
+    public static <K, EV> void detectComponentVC(
             ExecutionEnvironment environment,
-            Graph<Long, Long, NullValue> graph,
-            String partitionCentricOutput,
+            Graph<K, Long, EV> graph,
             String vertexCentricOutput) throws Exception {
+
+        LOG.debug("Start warming up JVM");
+        Telemetry.dummyPCConnectedComponent(environment);
+        LOG.debug("JVM warm up finished");
+
+        JobExecutionResult result;
+        Map<String, String> fields = new HashMap<>();
+
+        environment.startNewSession();
+        ConnectedComponents<K, EV> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
+        vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        result = environment.execute();
+        fields.clear();
+        Telemetry.printTelemetry("Vertex centric", result, fields);
+    }
+
+    public static <K, EV> void detectComponentPC(ExecutionEnvironment environment,
+                                         Graph<K, Long, EV> graph,
+                                         String partitionCentricOutput) throws Exception {
+        // Run some dummy computation to warmup the jvm
+        LOG.debug("Start warming up JVM");
+        Telemetry.dummyVCConnectedComponent(environment);
+        LOG.debug("JVM warm up finished");
+
         JobExecutionResult result;
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
         configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
@@ -52,7 +79,7 @@ public class GraphCCRunner {
         configuration.registerAccumulator(PartitionCentricIteration.ITER_TIMER, new IterationTimer());
 
         environment.startNewSession();
-        PCConnectedComponents<Long, NullValue> algo = new PCConnectedComponents<>(
+        PCConnectedComponents<K, EV> algo = new PCConnectedComponents<>(
                 Integer.MAX_VALUE, configuration);
         algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
         result = environment.execute();
@@ -63,12 +90,5 @@ public class GraphCCRunner {
         fields.put(PCConnectedComponents.ACTIVE_VER_ITER_CTR, "Active vertices");
         fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
         Telemetry.printTelemetry("Partition centric", result, fields);
-
-        environment.startNewSession();
-        ConnectedComponents<Long, NullValue> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
-        vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
-        result = environment.execute();
-        fields.clear();
-        Telemetry.printTelemetry("Vertex centric", result, fields);
     }
 }
