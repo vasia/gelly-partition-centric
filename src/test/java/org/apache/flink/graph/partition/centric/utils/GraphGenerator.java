@@ -19,13 +19,19 @@
 
 package org.apache.flink.graph.partition.centric.utils;
 
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.example.SingleSourceShortestPaths;
+import org.apache.flink.graph.example.utils.SingleSourceShortestPathsData;
 import org.apache.flink.test.testdata.ConnectedComponentsData;
+import org.apache.flink.types.NullValue;
 
 import java.util.HashSet;
+import java.util.LongSummaryStatistics;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -58,5 +64,23 @@ public class GraphGenerator {
             edgesSet.add(reverseEdge);
         }
         return Graph.fromCollection(verticesSet, edgesSet, environment);
+    }
+
+    /**
+     * Generate a weighted graph for SSSP algorithm.
+     * Data used from SingleSourceShortestPathsData class
+     *
+     * @param environment The execution environment
+     * @return An instance of a Graph<Long, NullValue, Double> object. Vertex value is null since it is set during SSSP
+     */
+    public static Graph<Long, Double, Double> generateSSSPGraph(ExecutionEnvironment environment) {
+        DataSet<Edge<Long, Double>> edges = SingleSourceShortestPathsData.getDefaultEdgeDataSet(environment);
+
+        return Graph.fromDataSet(edges, new MapFunction<Long, Double>() {
+            @Override
+            public Double map(Long value) throws Exception {
+                return Double.MAX_VALUE;
+            }
+        }, environment);
     }
 }

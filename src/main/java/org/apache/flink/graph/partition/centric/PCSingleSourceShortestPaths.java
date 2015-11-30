@@ -74,17 +74,7 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
     public DataSet<Vertex<K, Double>> run(Graph<K, Double, EV> graph) throws Exception {
 
         //Update vertex values to 0.0 for source vertex and Double.MAX_VALUE for the rest
-        Graph<K, Double, EV> updatedGraph = graph.mapVertices(new MapFunction<Vertex<K, Double>, Double>() {
-            @Override
-            public Double map(Vertex<K, Double> vertex) throws Exception {
-                if (vertex.getId().equals(getSrcVertexId())) {
-                    return 0.0;
-                }
-                else {
-                    return Double.MAX_VALUE;
-                }
-            }
-        });
+        Graph<K, Double, EV> updatedGraph = graph.mapVertices(new DoubleValueVertexMapper<K>(getSrcVertexId()));
 
         //Convert graph to partition-centric graph
         PCGraph<K, Double, EV> pcGraph = new PCGraph<>(updatedGraph);
@@ -96,6 +86,24 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
                         configuration, maxIterations);
 
         return result.getVertices();
+    }
+
+    public static final class DoubleValueVertexMapper<K> implements MapFunction<Vertex<K, Double>, Double> {
+        private K srcVertexId;
+
+        public DoubleValueVertexMapper(K srcVertexId) {
+            this.srcVertexId = srcVertexId;
+        }
+
+        @Override
+        public Double map(Vertex<K, Double> value) throws Exception {
+            if (value.getId().equals(this.srcVertexId)) {
+                return 0.0;
+            }
+            else {
+                return Double.MAX_VALUE;
+            }
+        }
     }
 
     /**
@@ -121,14 +129,10 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
                 Edge<K, EV> edge = vertice.f1;
                 K sourceId = edge.getSource();
                 K targetId = edge.getTarget();
-
                 Double pathValue = sourceValue;
 
-                //If condition true, calculate path value.
-                //Initial (non-source) vertex values are Double.MAX_VALUE.
                 if (sourceValue < Double.MAX_VALUE) {
-                    EV edgeValue = edge.getValue();
-                    pathValue += (Long)edgeValue;
+                    pathValue += (Double)edge.getValue();
                 }
 
                 Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
@@ -181,7 +185,7 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
             //If vertex value bigger than minValue, update vertex value
             //and increase the Active Vertex counter for the next iteration
             if (minValue < vertex.getValue()) {
-                vertex.setValue(minValue);
+                setVertexValue(minValue);
 
                 if (vertexHistogram != null) {
                     vertexHistogram.add(context.getSuperstepNumber() + 1);
