@@ -1,6 +1,7 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.accumulators.Histogram;
+import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -13,6 +14,8 @@ import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+
 
 /**
  * Single Source Shortest Path algorithm implementation using partition centric iterations
@@ -20,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * @param <K> Type of Vertex ID
  * @param <EV> Type of Edge value
  */
-public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Double, EV, DataSet<Vertex<K, Double>>> {
+public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Double, EV, DataSet<Vertex<K, Double>>> {
 
     public static final String MESSAGE_SENT_CTR = "long:message_sent";
     public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
@@ -37,7 +40,7 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
      * @param srcVertexId ID of the source vertex
      * @param maxIterations Maximum number of iterations of algorithm
      */
-    public PCSingleSourceShortestPath(K srcVertexId, int maxIterations) {
+    public PCSingleSourceShortestPaths(K srcVertexId, int maxIterations) {
         this.srcVertexId = srcVertexId;
         this.maxIterations = maxIterations;
         this.configuration = null;
@@ -50,7 +53,7 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
      * @param maxIterations Maximum number of iterations of algorithm
      * @param configuration PartitionCentricConfiguration object for iterations
      */
-    public PCSingleSourceShortestPath(K srcVertexId, int maxIterations, PartitionCentricConfiguration configuration) {
+    public PCSingleSourceShortestPaths(K srcVertexId, int maxIterations, PartitionCentricConfiguration configuration) {
         this.srcVertexId = srcVertexId;
         this.maxIterations = maxIterations;
         this.configuration = configuration;
@@ -83,6 +86,7 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
             }
         });
 
+        //Convert graph to partition-centric graph
         PCGraph<K, Double, EV> pcGraph = new PCGraph<>(updatedGraph);
 
         Graph<K, Double, EV> result =
@@ -108,11 +112,14 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
         @Override
         public void processPartition(Iterable<Tuple2<Double, Edge<K, EV>>> vertices) throws Exception {
 
+            ArrayList<K> sourceVertices = new ArrayList<K>();
+
             //Calculate the path length to every destination node
             for (Tuple2<Double, Edge<K, EV>> vertice : vertices) {
 
                 Double sourceValue = vertice.f0;
                 Edge<K, EV> edge = vertice.f1;
+                K sourceId = edge.getSource();
                 K targetId = edge.getTarget();
 
                 Double pathValue = sourceValue;
@@ -124,7 +131,29 @@ public class PCSingleSourceShortestPath<K, EV> implements GraphAlgorithm<K, Doub
                     pathValue += (Long)edgeValue;
                 }
 
+                Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
+                LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
+                LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
+                Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
+
+                if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
+                    iterationCounter.add(1);
+                }
+
                 sendMessage(targetId, pathValue);
+                if (messageCounter != null) {
+                    messageCounter.add(1);
+                }
+                if (messageHistogram != null) {
+                    messageHistogram.add(context.getSuperstepNumber());
+                }
+
+                //Since a vertex can send multiple messages in one iteration,
+                //we need to count a vertex only once
+                if (vertexHistogram != null && !sourceVertices.contains(sourceId)) {
+                    vertexHistogram.add(context.getSuperstepNumber());
+                    sourceVertices.add(sourceId);
+                }
             }
 
         }
