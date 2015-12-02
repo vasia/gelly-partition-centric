@@ -25,13 +25,9 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.example.SingleSourceShortestPaths;
 import org.apache.flink.graph.example.utils.SingleSourceShortestPathsData;
-import org.apache.flink.test.testdata.ConnectedComponentsData;
-import org.apache.flink.types.NullValue;
 
 import java.util.HashSet;
-import java.util.LongSummaryStatistics;
 import java.util.Scanner;
 import java.util.Set;
 

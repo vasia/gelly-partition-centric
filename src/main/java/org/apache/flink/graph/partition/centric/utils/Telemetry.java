@@ -20,17 +20,12 @@
 package org.apache.flink.graph.partition.centric.utils;
 
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Graph;
-import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.library.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
-import org.apache.flink.test.testdata.ConnectedComponentsData;
 
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
