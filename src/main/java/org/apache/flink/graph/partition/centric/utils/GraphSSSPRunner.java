@@ -25,13 +25,13 @@ import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
-import org.apache.flink.graph.library.ConnectedComponents;
 import org.apache.flink.graph.library.SingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCSingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
-import org.apache.flink.types.NullValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,15 +41,16 @@ import java.util.Map;
  */
 public class GraphSSSPRunner {
 
-    public static void detectComponent(
+    private final static Logger LOG = LoggerFactory.getLogger(GraphSSSPRunner.class);
+
+    public static void detectComponentPC (
             ExecutionEnvironment environment,
             Graph<Long, Double, Double> graph,
             Long srcVertexId,
-            String partitionCentricOutput,
-            String vertexCentricOutput) throws Exception {
+            String partitionCentricOutput) throws Exception {
 
         JobExecutionResult result;
-
+        Map<String, String> fields = new HashMap<>();
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
 
         configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
@@ -60,11 +61,11 @@ public class GraphSSSPRunner {
 
         environment.startNewSession();
 
-        PCSingleSourceShortestPaths<Long, Double> algo = new PCSingleSourceShortestPaths<Long, Double>(srcVertexId, Integer.MAX_VALUE, configuration);
+        PCSingleSourceShortestPaths<Long, Double> pcAlgorithm = new PCSingleSourceShortestPaths<Long, Double>(srcVertexId, Integer.MAX_VALUE, configuration);
 
-        algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        pcAlgorithm.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
         result = environment.execute();
-        Map<String, String> fields = new HashMap<>();
+
 
         fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
         fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
@@ -73,12 +74,27 @@ public class GraphSSSPRunner {
         fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
 
         Telemetry.printTelemetry("Partition centric", result, fields);
+    }
 
+    public static void detectComponentVC (ExecutionEnvironment environment,
+                                          Graph<Long, Double, Double> graph,
+                                          Long srcVertexId,
+                                          String vertexCentricOutput) throws Exception {
+
+        LOG.debug("Start warming up JVM");
+        Telemetry.dummyVCConnectedComponent(environment);
+        LOG.debug("JVM warm up finished");
+
+        JobExecutionResult result;
+        Map<String, String> fields = new HashMap<>();
         environment.startNewSession();
-        SingleSourceShortestPaths<Long> vcAlgo = new SingleSourceShortestPaths<>(srcVertexId, Integer.MAX_VALUE);
-        vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
+
+        SingleSourceShortestPaths<Long> vcAlgorithm = new SingleSourceShortestPaths<>(srcVertexId, Integer.MAX_VALUE);
+
+        vcAlgorithm.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
         result = environment.execute();
         fields.clear();
+
         Telemetry.printTelemetry("Vertex centric", result, fields);
     }
 }

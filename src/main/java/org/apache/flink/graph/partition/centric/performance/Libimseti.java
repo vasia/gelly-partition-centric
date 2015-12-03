@@ -23,6 +23,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.partition.centric.utils.EnvironmentWrapper;
 import org.apache.flink.graph.partition.centric.utils.GraphSSSPRunner;
 import org.apache.flink.types.NullValue;
 
@@ -30,17 +31,28 @@ import org.apache.flink.types.NullValue;
  * Testing the PCSingleSourceShortestPaths on the Libimseti dating website dataset.
  */
 public class Libimseti {
+
     public static void main(String[] args) throws Exception {
 
-        ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
-        environment.getConfig().disableSysoutLogging();
+        EnvironmentWrapper wrapper;
+        if (args.length < 3) {
+            printErr();
+            return;
+        } else if (args[1].equals("remote")) {
+            wrapper = EnvironmentWrapper.newRemote();
+        } else if (args[1].equals("local")) {
+            wrapper = EnvironmentWrapper.newLocal();
+        } else {
+            printErr();
+            return;
+        }
+
+        wrapper.getEnvironment().getConfig().disableSysoutLogging();
 
         Graph<Long, Double, Double> graph = Graph
-                .fromCsvReader("data/libimseti/out.libimseti.data", environment)
-                .fieldDelimiterEdges("\t")
+                .fromCsvReader(wrapper.getInputRoot() + "libimseti/out.libimseti.data", wrapper.getEnvironment())
+                .fieldDelimiterEdges(" ")
                 .lineDelimiterEdges("\n")
-                .ignoreCommentsEdges("%")
-                .ignoreInvalidLinesEdges()
                 .edgeTypes(Long.class, Double.class)
                 .mapVertices(new MapFunction<Vertex<Long, NullValue>, Double>() {
                     @Override
@@ -49,6 +61,34 @@ public class Libimseti {
                     }
                 });
 
-        GraphSSSPRunner.detectComponent(environment, graph, 1l, "out/pc_libimseti", "out/vc_libimseti");
+        switch (args[0]) {
+            case "pc":
+                GraphSSSPRunner.detectComponentPC(
+                        wrapper.getEnvironment(),
+                        graph,
+                        Long.getLong(args[2]),
+                        wrapper.getOutputRoot() + "pc_libimseti"
+                );
+                break;
+            case "vc":
+                GraphSSSPRunner.detectComponentVC(
+                        wrapper.getEnvironment(),
+                        graph,
+                        Long.getLong(args[2]),
+                        wrapper.getOutputRoot() + "vc_libimseti");
+                break;
+            default:
+                printErr();
+                break;
+        }
+    }
+
+    private static void printErr() {
+        System.err.println("Please choose benchmark to run.");
+        System.err.printf("Run \"java %s pc local\" for local partition-centric%n", Libimseti.class);
+        System.err.printf("Run \"java %s vc local\" for local vertex-centric%n", Libimseti.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", Libimseti.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", Libimseti.class);
+        System.exit(-1);
     }
 }

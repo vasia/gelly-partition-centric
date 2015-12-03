@@ -23,6 +23,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.partition.centric.utils.EnvironmentWrapper;
 import org.apache.flink.graph.partition.centric.utils.GraphCCRunner;
 import org.apache.flink.graph.partition.centric.utils.GraphSSSPRunner;
 import org.apache.flink.types.NullValue;
@@ -31,13 +32,26 @@ import org.apache.flink.types.NullValue;
  * Testing the PCSingleSourceShortestPaths on the US Airport Network dataset
  */
 public class USAirportsNetwork {
+
     public static void main(String[] args) throws Exception {
 
-        ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
-        environment.getConfig().disableSysoutLogging();
+        EnvironmentWrapper wrapper;
+        if (args.length < 3) {
+            printErr();
+            return;
+        } else if (args[1].equals("remote")) {
+            wrapper = EnvironmentWrapper.newRemote();
+        } else if (args[1].equals("local")) {
+            wrapper = EnvironmentWrapper.newLocal();
+        } else {
+            printErr();
+            return;
+        }
+
+        wrapper.getEnvironment().getConfig().disableSysoutLogging();
 
         Graph<Long, Double, Double> graph = Graph
-                .fromCsvReader("data/us_airport_network/us_airport_network.data", environment)
+                .fromCsvReader(wrapper.getInputRoot() + "us_airport_network/us_airport_network.data", wrapper.getEnvironment())
                 .fieldDelimiterEdges(" ")
                 .lineDelimiterEdges("\n")
                 .edgeTypes(Long.class, Double.class)
@@ -48,6 +62,34 @@ public class USAirportsNetwork {
                     }
                 });
 
-        GraphSSSPRunner.detectComponent(environment, graph, 1l, "out/pc_us_airports", "out/vc_us_airports");
+        switch (args[0]) {
+            case "pc":
+                GraphSSSPRunner.detectComponentPC(
+                        wrapper.getEnvironment(),
+                        graph,
+                        Long.getLong(args[2]),
+                        wrapper.getOutputRoot() + "pc_usairport"
+                );
+                break;
+            case "vc":
+                GraphSSSPRunner.detectComponentVC(
+                        wrapper.getEnvironment(),
+                        graph,
+                        Long.getLong(args[2]),
+                        wrapper.getOutputRoot() + "vc_usairport");
+                break;
+            default:
+                printErr();
+                break;
+        }
+    }
+
+    private static void printErr() {
+        System.err.println("Please choose benchmark to run.");
+        System.err.printf("Run \"java %s pc local\" for local partition-centric%n", USAirportsNetwork.class);
+        System.err.printf("Run \"java %s vc local\" for local vertex-centric%n", USAirportsNetwork.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", USAirportsNetwork.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", USAirportsNetwork.class);
+        System.exit(-1);
     }
 }
