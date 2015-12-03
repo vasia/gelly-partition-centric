@@ -15,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.function.Consumer;
 
 
 /**
@@ -120,9 +122,11 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
         @Override
         public void processPartition(Iterable<Tuple2<Double, Edge<K, EV>>> vertices) throws Exception {
 
-            ArrayList<K> sourceVertices = new ArrayList<K>();
+            HashMap<K, Double> targetVertices = new HashMap<>();
+            ArrayList<K> partitionVertices = new ArrayList<>();
 
-            //Calculate the path length to every destination node
+            //Calculate the path length to every destination node,
+            //but only send the smallest path length to every single destination node
             for (Tuple2<Double, Edge<K, EV>> vertice : vertices) {
 
                 Double sourceValue = vertice.f0;
@@ -132,19 +136,36 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
                 Double pathValue = sourceValue;
 
                 if (sourceValue < Double.MAX_VALUE) {
-                    pathValue += (Double)edge.getValue();
+                    pathValue += (Double) edge.getValue();
                 }
+
+                if (!partitionVertices.contains(sourceId)) {
+                    partitionVertices.add(sourceId);
+                }
+
+                if (targetVertices.containsKey(targetId)) {
+                    Double vertexValue = targetVertices.get(targetId).doubleValue();
+                    if (pathValue < vertexValue) {
+                        targetVertices.put(targetId, pathValue);
+                    }
+                } else {
+                    targetVertices.put(targetId, pathValue);
+                }
+            }
+
 
                 Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
                 LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
                 LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
                 Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
 
+            for (HashMap.Entry<K, Double> targetVertice : targetVertices.entrySet()) {
+
                 if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
                     iterationCounter.add(1);
                 }
 
-                sendMessage(targetId, pathValue);
+                sendMessage(targetVertice.getKey(), targetVertice.getValue());
                 if (messageCounter != null) {
                     messageCounter.add(1);
                 }
@@ -154,9 +175,8 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
 
                 //Since a vertex can send multiple messages in one iteration,
                 //we need to count a vertex only once
-                if (vertexHistogram != null && !sourceVertices.contains(sourceId)) {
+                if (vertexHistogram != null && !partitionVertices.contains(targetVertice.getKey())) {
                     vertexHistogram.add(context.getSuperstepNumber());
-                    sourceVertices.add(sourceId);
                 }
             }
 
