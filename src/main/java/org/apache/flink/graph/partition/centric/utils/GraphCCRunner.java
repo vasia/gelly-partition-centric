@@ -23,13 +23,14 @@ import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.accumulators.Histogram;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.io.DiscardingOutputFormat;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.library.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
-import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +46,7 @@ public class GraphCCRunner {
     public static <K, EV> void detectComponentVC(
             ExecutionEnvironment environment,
             Graph<K, Long, EV> graph,
-            String vertexCentricOutput) throws Exception {
+            String vertexCentricOutput, boolean discardOutput) throws Exception {
 
         LOG.debug("Start warming up JVM");
         Telemetry.dummyVCConnectedComponent(environment);
@@ -56,15 +57,19 @@ public class GraphCCRunner {
 
         environment.startNewSession();
         ConnectedComponents<K, EV> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
-        vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        if (discardOutput) {
+            vcAlgo.run(graph).output(new DiscardingOutputFormat<Vertex<K, Long>>());
+        } else {
+            vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        }
         result = environment.execute();
         fields.clear();
         Telemetry.printTelemetry("Vertex centric", result, fields);
     }
 
     public static <K, EV> void detectComponentPC(ExecutionEnvironment environment,
-                                         Graph<K, Long, EV> graph,
-                                         String partitionCentricOutput) throws Exception {
+                                                 Graph<K, Long, EV> graph,
+                                                 String partitionCentricOutput, boolean discardOutput) throws Exception {
         // Run some dummy computation to warmup the jvm
         LOG.debug("Start warming up JVM");
         Telemetry.dummyPCConnectedComponent(environment);
@@ -81,7 +86,11 @@ public class GraphCCRunner {
         environment.startNewSession();
         PCConnectedComponents<K, EV> algo = new PCConnectedComponents<>(
                 Integer.MAX_VALUE, configuration);
-        algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        if (discardOutput) {
+            algo.run(graph).output(new DiscardingOutputFormat<Vertex<K, Long>>());
+        } else {
+            algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        }
         result = environment.execute();
         Map<String, String> fields = new HashMap<>();
         fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");

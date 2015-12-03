@@ -23,7 +23,6 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.partition.centric.utils.GraphCCRunner;
 import org.apache.flink.graph.partition.centric.utils.GraphGenerator;
-import org.apache.flink.types.NullValue;
 
 /**
  * Compare performance between vertex centric and partition centric implementation
@@ -42,9 +41,9 @@ public class GeneratedGraph {
         if (args.length < 1) {
             printErr();
         } else if (args[0].equals("1")) {
-            GraphCCRunner.detectComponentPC(environment, graph, "out/pcgenerated");
+            GraphCCRunner.detectComponentPC(environment, graph, "out/pcgenerated", true);
         } else if (args[0].equals("2")) {
-            GraphCCRunner.detectComponentVC(environment, graph, "out/vcgenerated");
+            GraphCCRunner.detectComponentVC(environment, graph, "out/vcgenerated", true);
         } else {
             printErr();
         }

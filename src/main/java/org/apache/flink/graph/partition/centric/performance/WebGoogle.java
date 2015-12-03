@@ -20,14 +20,10 @@
 package org.apache.flink.graph.partition.centric.performance;
 
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.partition.centric.utils.EnvironmentWrapper;
 import org.apache.flink.graph.partition.centric.utils.GraphCCRunner;
-import org.apache.flink.graph.partition.centric.utils.Telemetry;
 import org.apache.flink.types.NullValue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Testing the PCConnectedComponents on Twitter Munmun dataset
@@ -70,13 +66,15 @@ public class WebGoogle {
                 GraphCCRunner.detectComponentPC(
                         wrapper.getEnvironment(),
                         graph,
-                        wrapper.getOutputRoot() + "pcgoogle");
+                        wrapper.getOutputRoot() + "pcgoogle",
+                        true);
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
                         wrapper.getEnvironment(),
                         graph,
-                        wrapper.getOutputRoot() + "vcgoogle");
+                        wrapper.getOutputRoot() + "vcgoogle",
+                        true);
                 break;
             default:
                 printErr();

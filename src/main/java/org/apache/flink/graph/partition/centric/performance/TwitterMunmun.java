@@ -20,7 +20,6 @@
 package org.apache.flink.graph.partition.centric.performance;
 
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.partition.centric.utils.EnvironmentWrapper;
 import org.apache.flink.graph.partition.centric.utils.GraphCCRunner;
@@ -66,14 +65,15 @@ public class TwitterMunmun {
                 GraphCCRunner.detectComponentPC(
                         wrapper.getEnvironment(),
                         graph,
-                        wrapper.getOutputRoot() + "pctwitter"
-                );
+                        wrapper.getOutputRoot() + "pctwitter",
+                        true);
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
                         wrapper.getEnvironment(),
                         graph,
-                        wrapper.getOutputRoot() + "vctwitter");
+                        wrapper.getOutputRoot() + "vctwitter",
+                        true);
                 break;
             default:
                 printErr();
