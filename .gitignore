@@ -34,3 +34,6 @@ out/
 #Logging
 log4j.properties
 logs/
+
+#Server address
+server.properties
