@@ -46,58 +46,62 @@ public class GraphCCRunner {
     public static <K, EV> void detectComponentVC(
             ExecutionEnvironment environment,
             Graph<K, Long, EV> graph,
-            String vertexCentricOutput, boolean discardOutput) throws Exception {
+            String vertexCentricOutput,
+            boolean discardOutput,
+            int loopCount) throws Exception {
+        LOG.debug("Preparing to run vertex centric iteration in {} loops", loopCount);
+        for(int i = 1; i <= loopCount; i++) {
+            LOG.debug("Loop {} starting", i);
+            JobExecutionResult result;
+            Map<String, String> fields = new HashMap<>();
 
-        LOG.debug("Start warming up JVM");
-        Telemetry.dummyVCConnectedComponent(environment);
-        LOG.debug("JVM warm up finished");
-
-        JobExecutionResult result;
-        Map<String, String> fields = new HashMap<>();
-
-        environment.startNewSession();
-        ConnectedComponents<K, EV> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
-        if (discardOutput) {
-            vcAlgo.run(graph).output(new DiscardingOutputFormat<Vertex<K, Long>>());
-        } else {
-            vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
+            environment.startNewSession();
+            ConnectedComponents<K, EV> vcAlgo = new ConnectedComponents<>(Integer.MAX_VALUE);
+            if (discardOutput) {
+                vcAlgo.run(graph).output(new DiscardingOutputFormat<Vertex<K, Long>>());
+            } else {
+                vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
+            }
+            result = environment.execute();
+            fields.clear();
+            Telemetry.printTelemetry("Vertex centric", result, fields);
+            LOG.debug("Loop {} ended", i);
         }
-        result = environment.execute();
-        fields.clear();
-        Telemetry.printTelemetry("Vertex centric", result, fields);
     }
 
     public static <K, EV> void detectComponentPC(ExecutionEnvironment environment,
                                                  Graph<K, Long, EV> graph,
-                                                 String partitionCentricOutput, boolean discardOutput) throws Exception {
-        // Run some dummy computation to warmup the jvm
-        LOG.debug("Start warming up JVM");
-        Telemetry.dummyPCConnectedComponent(environment);
-        LOG.debug("JVM warm up finished");
+                                                 String partitionCentricOutput,
+                                                 boolean discardOutput,
+                                                 int loopCount) throws Exception {
+        LOG.debug("Preparing to run partition centric iteration in {} loops", loopCount);
+        for (int i = 1; i <= loopCount; i++) {
+            LOG.debug("Loop {} starting", i);
+            JobExecutionResult result;
+            PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
+            configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
+            configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, new Histogram());
+            configuration.registerAccumulator(PCConnectedComponents.ITER_CTR, new LongCounter());
+            configuration.registerAccumulator(PCConnectedComponents.ACTIVE_VER_ITER_CTR, new Histogram());
+            configuration.registerAccumulator(PartitionCentricIteration.ITER_TIMER, new IterationTimer());
 
-        JobExecutionResult result;
-        PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
-        configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
-        configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, new Histogram());
-        configuration.registerAccumulator(PCConnectedComponents.ITER_CTR, new LongCounter());
-        configuration.registerAccumulator(PCConnectedComponents.ACTIVE_VER_ITER_CTR, new Histogram());
-        configuration.registerAccumulator(PartitionCentricIteration.ITER_TIMER, new IterationTimer());
-
-        environment.startNewSession();
-        PCConnectedComponents<K, EV> algo = new PCConnectedComponents<>(
-                Integer.MAX_VALUE, configuration);
-        if (discardOutput) {
-            algo.run(graph).output(new DiscardingOutputFormat<Vertex<K, Long>>());
-        } else {
-            algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
+            environment.startNewSession();
+            PCConnectedComponents<K, EV> algo = new PCConnectedComponents<>(
+                    Integer.MAX_VALUE, configuration);
+            if (discardOutput) {
+                algo.run(graph).output(new DiscardingOutputFormat<Vertex<K, Long>>());
+            } else {
+                algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
+            }
+            result = environment.execute();
+            Map<String, String> fields = new HashMap<>();
+            fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
+            fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
+            fields.put(PCConnectedComponents.ITER_CTR, "Iteration count");
+            fields.put(PCConnectedComponents.ACTIVE_VER_ITER_CTR, "Active vertices");
+            fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
+            Telemetry.printTelemetry("Partition centric", result, fields);
+            LOG.debug("Loop {} ended", i);
         }
-        result = environment.execute();
-        Map<String, String> fields = new HashMap<>();
-        fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
-        fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
-        fields.put(PCConnectedComponents.ITER_CTR, "Iteration count");
-        fields.put(PCConnectedComponents.ACTIVE_VER_ITER_CTR, "Active vertices");
-        fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
-        Telemetry.printTelemetry("Partition centric", result, fields);
     }
 }

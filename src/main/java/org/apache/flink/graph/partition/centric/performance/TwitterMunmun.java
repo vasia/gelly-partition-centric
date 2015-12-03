@@ -66,14 +66,16 @@ public class TwitterMunmun {
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "pctwitter",
-                        true);
+                        true,
+                        10);
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "vctwitter",
-                        true);
+                        true,
+                        10);
                 break;
             default:
                 printErr();

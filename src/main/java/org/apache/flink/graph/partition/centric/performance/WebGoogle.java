@@ -67,14 +67,16 @@ public class WebGoogle {
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "pcgoogle",
-                        true);
+                        true,
+                        10);
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "vcgoogle",
-                        true);
+                        true,
+                        10);
                 break;
             default:
                 printErr();

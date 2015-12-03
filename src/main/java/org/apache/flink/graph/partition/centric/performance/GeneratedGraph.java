@@ -41,9 +41,9 @@ public class GeneratedGraph {
         if (args.length < 1) {
             printErr();
         } else if (args[0].equals("1")) {
-            GraphCCRunner.detectComponentPC(environment, graph, "out/pcgenerated", true);
+            GraphCCRunner.detectComponentPC(environment, graph, "out/pcgenerated", true, 1);
         } else if (args[0].equals("2")) {
-            GraphCCRunner.detectComponentVC(environment, graph, "out/vcgenerated", true);
+            GraphCCRunner.detectComponentVC(environment, graph, "out/vcgenerated", true, 1);
         } else {
             printErr();
         }
