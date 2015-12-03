@@ -48,7 +48,7 @@ public class GraphCCRunner {
             String vertexCentricOutput) throws Exception {
 
         LOG.debug("Start warming up JVM");
-        Telemetry.dummyPCConnectedComponent(environment);
+        Telemetry.dummyVCConnectedComponent(environment);
         LOG.debug("JVM warm up finished");
 
         JobExecutionResult result;
@@ -67,7 +67,7 @@ public class GraphCCRunner {
                                          String partitionCentricOutput) throws Exception {
         // Run some dummy computation to warmup the jvm
         LOG.debug("Start warming up JVM");
-        Telemetry.dummyVCConnectedComponent(environment);
+        Telemetry.dummyPCConnectedComponent(environment);
         LOG.debug("JVM warm up finished");
 
         JobExecutionResult result;
