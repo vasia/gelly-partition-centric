@@ -22,6 +22,7 @@ package org.apache.flink.graph.partition.centric.performance;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
+import org.apache.flink.graph.partition.centric.utils.EnvironmentWrapper;
 import org.apache.flink.graph.partition.centric.utils.GraphCCRunner;
 import org.apache.flink.graph.partition.centric.utils.Telemetry;
 import org.apache.flink.types.NullValue;
@@ -34,38 +35,61 @@ import org.slf4j.LoggerFactory;
 public class WebGoogle {
     public static void main(String[] args) throws Exception {
 
-        ExecutionEnvironment environment = ExecutionEnvironment.getExecutionEnvironment();
-        environment.getConfig().disableSysoutLogging();
+        EnvironmentWrapper wrapper;
+        if (args.length < 2) {
+            printErr();
+            return;
+        } else if (args[1].equals("remote")) {
+            wrapper = EnvironmentWrapper.newRemote();
+        } else if (args[1].equals("local")) {
+            wrapper = EnvironmentWrapper.newLocal();
+        } else {
+            printErr();
+            return;
+        }
+
+        wrapper.getEnvironment().getConfig().disableSysoutLogging();
 
         Graph<Long, Long, NullValue> graph = Graph
                 .fromCsvReader(
-                        "data/web-Google/web-Google.data",
+                        wrapper.getInputRoot() + "web-Google/web-Google.data",
                         new MapFunction<Object, Object>() {
                             @Override
                             public Object map(Object value) throws Exception {
                                 return value;
                             }
-                        }, environment)
+                        },
+                        wrapper.getEnvironment())
                 .fieldDelimiterEdges("\t")
                 .lineDelimiterEdges("\n")
                 .ignoreCommentsEdges("#")
                 .vertexTypes(Long.class, Long.class);
 
-        if (args.length < 1) {
-            printErr();
-        } else if (args[0].equals("1")) {
-            GraphCCRunner.detectComponentPC(environment, graph, "out/pcgoogle");
-        } else if (args[0].equals("2")) {
-            GraphCCRunner.detectComponentVC(environment, graph, "out/vcgoogle");
-        } else {
-            printErr();
+        switch (args[0]) {
+            case "pc":
+                GraphCCRunner.detectComponentPC(
+                        wrapper.getEnvironment(),
+                        graph,
+                        wrapper.getOutputRoot() + "pcgoogle");
+                break;
+            case "vc":
+                GraphCCRunner.detectComponentVC(
+                        wrapper.getEnvironment(),
+                        graph,
+                        wrapper.getOutputRoot() + "vcgoogle");
+                break;
+            default:
+                printErr();
+                break;
         }
     }
 
     private static void printErr() {
         System.err.println("Please choose benchmark to run.");
-        System.err.printf("Run \"java %s 1\" for partition-centric%n", WebGoogle.class);
-        System.err.printf("Run \"java %s 2\" for vertex-centric%n", WebGoogle.class);
+        System.err.printf("Run \"java %s pc local\" for local partition-centric%n", WebGoogle.class);
+        System.err.printf("Run \"java %s vc local\" for local vertex-centric%n", WebGoogle.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", WebGoogle.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", WebGoogle.class);
         System.exit(-1);
     }
 }
