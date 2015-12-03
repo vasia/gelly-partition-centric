@@ -19,6 +19,7 @@
 
 package org.apache.flink.graph.partition.centric.utils;
 
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.configuration.Configuration;
 
@@ -48,6 +49,7 @@ public class EnvironmentWrapper {
         String outputRoot = properties.getProperty("outputRoot");
         String flinkMasterURI = properties.getProperty("flinkMasterURI");
         int flinkMasterPort = Integer.parseInt(properties.getProperty("flinkMasterPort"));
+        int parallelism = Integer.parseInt(properties.getProperty("parallelism", "12"));
         Configuration configuration = new Configuration();
         configuration.setString("akka.framesize", "52428800b");
         ExecutionEnvironment environment = ExecutionEnvironment
@@ -57,7 +59,7 @@ public class EnvironmentWrapper {
                         configuration,
                         "target/gelly-partition-centric-1.0-SNAPSHOT-fatjar.jar"
                 );
-
+        environment.getConfig().setParallelism(parallelism);
         return new EnvironmentWrapper(inputRoot, outputRoot, environment);
     }
 

@@ -23,3 +23,4 @@ inputRoot=hdfs://server_address:50040/gelly-partition-centric/data/
 outputRoot=hdfs://server_address:50040/gelly-partition-centric/out/
 flinkMasterURI=server_address
 flinkMasterPort=6123
+parallelism=12
