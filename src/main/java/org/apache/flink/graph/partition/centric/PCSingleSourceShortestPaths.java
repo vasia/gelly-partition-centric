@@ -154,18 +154,20 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
             }
 
 
-                Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
-                LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
-                LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
-                Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
+            Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
+            LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
+            LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
+            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
 
+            //Send minimum path values to target vertices
             for (HashMap.Entry<K, Double> targetVertice : targetVertices.entrySet()) {
+
+                sendMessage(targetVertice.getKey(), targetVertice.getValue());
 
                 if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
                     iterationCounter.add(1);
                 }
 
-                sendMessage(targetVertice.getKey(), targetVertice.getValue());
                 if (messageCounter != null) {
                     messageCounter.add(1);
                 }
@@ -174,7 +176,7 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
                 }
 
                 //Since a vertex can send multiple messages in one iteration,
-                //we need to count a vertex only once
+                //we need to count only the local receiving vertices
                 if (vertexHistogram != null && !partitionVertices.contains(targetVertice.getKey())) {
                     vertexHistogram.add(context.getSuperstepNumber());
                 }
