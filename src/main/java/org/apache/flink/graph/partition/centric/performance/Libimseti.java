@@ -20,7 +20,6 @@
 package org.apache.flink.graph.partition.centric.performance;
 
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.partition.centric.utils.EnvironmentWrapper;
@@ -51,7 +50,8 @@ public class Libimseti {
 
         Graph<Long, Double, Double> graph = Graph
                 .fromCsvReader(wrapper.getInputRoot() + "libimseti/out.libimseti.data", wrapper.getEnvironment())
-                .fieldDelimiterEdges(" ")
+                .ignoreInvalidLinesEdges()
+                .fieldDelimiterEdges("\t")
                 .lineDelimiterEdges("\n")
                 .edgeTypes(Long.class, Double.class)
                 .mapVertices(new MapFunction<Vertex<Long, NullValue>, Double>() {
@@ -61,21 +61,29 @@ public class Libimseti {
                     }
                 });
 
+        int i = 15;
+
         switch (args[0]) {
             case "pc":
-                GraphSSSPRunner.detectComponentPC(
-                        wrapper.getEnvironment(),
-                        graph,
-                        Long.getLong(args[2]),
-                        wrapper.getOutputRoot() + "pc_libimseti"
-                );
+                while (i > 0) {
+                    GraphSSSPRunner.findSsspPC(
+                            wrapper.getEnvironment(),
+                            graph,
+                            Long.getLong(args[2]),
+                            wrapper.getOutputRoot() + "pc_libimseti"
+                    );
+                    i--;
+                }
                 break;
             case "vc":
-                GraphSSSPRunner.detectComponentVC(
-                        wrapper.getEnvironment(),
-                        graph,
-                        Long.getLong(args[2]),
-                        wrapper.getOutputRoot() + "vc_libimseti");
+                while (i > 0) {
+                    GraphSSSPRunner.findSsspVC(
+                            wrapper.getEnvironment(),
+                            graph,
+                            Long.getLong(args[2]),
+                            wrapper.getOutputRoot() + "vc_libimseti");
+                    i--;
+                }
                 break;
             default:
                 printErr();
