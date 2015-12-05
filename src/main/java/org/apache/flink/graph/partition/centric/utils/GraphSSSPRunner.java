@@ -20,15 +20,13 @@
 package org.apache.flink.graph.partition.centric.utils;
 
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.accumulators.Histogram;
-import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
-import org.apache.flink.graph.library.SingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PCSingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
+import org.apache.flink.graph.vertex.centric.SingleSourceShortestPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
