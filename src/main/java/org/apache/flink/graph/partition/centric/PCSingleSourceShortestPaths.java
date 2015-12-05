@@ -9,14 +9,11 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.utils.NullValueEdgeMapper;
-import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.function.Consumer;
 
 
 /**
@@ -45,7 +42,7 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
     public PCSingleSourceShortestPaths(K srcVertexId, int maxIterations) {
         this.srcVertexId = srcVertexId;
         this.maxIterations = maxIterations;
-        this.configuration = null;
+        this.configuration = new PartitionCentricConfiguration();
     }
 
     /**
@@ -83,7 +80,7 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
 
         Graph<K, Double, EV> result =
                 pcGraph.runPartitionCentricIteration(
-                        new SSSPPartitionProcessFunction<K, EV>(),
+                        new SSSPPartitionProcessFunction<K, EV>(configuration.isTelemetryEnabled()),
                         new SSSPVertexUpdateFunction<K, EV>(),
                         configuration, maxIterations);
 
@@ -118,6 +115,25 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
 
         private static final long serialVersionUID = 1L;
         private static final Logger LOG = LoggerFactory.getLogger(SSSPPartitionProcessFunction.class);
+        private final boolean telemetryEnabled;
+
+        public SSSPPartitionProcessFunction() {
+            telemetryEnabled = false;
+        }
+
+        public SSSPPartitionProcessFunction(boolean telemetryEnabled) {
+            this.telemetryEnabled = telemetryEnabled;
+        }
+
+        @Override
+        public void preSuperstep() {
+            if (telemetryEnabled) {
+                context.addAccumulator(MESSAGE_SENT_CTR, new LongCounter());
+                context.addAccumulator(MESSAGE_SENT_ITER_CTR, new Histogram());
+                context.addAccumulator(ITER_CTR, new LongCounter());
+                context.addAccumulator(ACTIVE_VER_ITER_CTR, new Histogram());
+            }
+        }
 
         @Override
         public void processPartition(Iterable<Tuple2<Double, Edge<K, EV>>> vertices) throws Exception {

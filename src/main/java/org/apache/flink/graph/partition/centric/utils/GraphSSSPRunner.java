@@ -51,12 +51,7 @@ public class GraphSSSPRunner {
         JobExecutionResult result;
         Map<String, String> fields = new HashMap<>();
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
-
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.MESSAGE_SENT_CTR, new LongCounter());
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.MESSAGE_SENT_ITER_CTR, new Histogram());
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.ITER_CTR, new LongCounter());
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.ACTIVE_VER_ITER_CTR, new Histogram());
-        configuration.registerAccumulator(PartitionCentricIteration.ITER_TIMER, new IterationTimer());
+        configuration.setTelemetryEnabled(true);
 
         environment.startNewSession();
 

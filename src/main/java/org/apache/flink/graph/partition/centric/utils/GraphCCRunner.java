@@ -79,11 +79,7 @@ public class GraphCCRunner {
             LOG.debug("Loop {} starting", i);
             JobExecutionResult result;
             PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
-            configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_CTR, new LongCounter());
-            configuration.registerAccumulator(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, new Histogram());
-            configuration.registerAccumulator(PCConnectedComponents.ITER_CTR, new LongCounter());
-            configuration.registerAccumulator(PCConnectedComponents.ACTIVE_VER_ITER_CTR, new Histogram());
-            configuration.registerAccumulator(PartitionCentricIteration.ITER_TIMER, new IterationTimer());
+            configuration.setTelemetryEnabled(true);
 
             environment.startNewSession();
             PCConnectedComponents<K, EV> algo = new PCConnectedComponents<>(

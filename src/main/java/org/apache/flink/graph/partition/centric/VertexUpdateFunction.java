@@ -41,6 +41,14 @@ public abstract class VertexUpdateFunction<K, VV, Message, EV> implements Serial
         this.context = context;
     }
 
+    public void preSuperStep() {
+
+    }
+
+    public void postSuperStep() {
+
+    }
+
     public void setVertexValue(VV value) {
         updated = true;
         vertex.setValue(value);
