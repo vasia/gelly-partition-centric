@@ -62,22 +62,4 @@ public class Telemetry {
             }
         }
     }
-
-    public static boolean dummyPCConnectedComponent(ExecutionEnvironment environment) throws Exception {
-        int verticesCount = 40000;
-        int edgesCount = verticesCount * 10;
-        Graph<Long, Long, Long> graph = GraphGenerator.generateGraph(verticesCount, edgesCount, environment);
-        PCConnectedComponents<Long, Long> algo = new PCConnectedComponents<>(verticesCount);
-        long result = algo.run(graph).count();
-        return result == verticesCount;
-    }
-
-    public static boolean dummyVCConnectedComponent(ExecutionEnvironment environment) throws Exception {
-        int verticesCount = 40000;
-        int edgesCount = verticesCount * 10;
-        Graph<Long, Long, Long> graph = GraphGenerator.generateGraph(verticesCount, edgesCount, environment);
-        ConnectedComponents<Long, Long> vcAlgo = new ConnectedComponents<>(verticesCount);
-        long result = vcAlgo.run(graph).count();
-        return result == verticesCount;
-    }
 }
