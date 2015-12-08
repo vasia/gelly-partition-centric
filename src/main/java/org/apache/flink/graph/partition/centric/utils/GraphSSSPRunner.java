@@ -23,8 +23,10 @@ import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.accumulators.Histogram;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.io.DiscardingOutputFormat;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.library.SingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PCSingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
@@ -48,6 +50,7 @@ public class GraphSSSPRunner {
             Long srcVertexId,
             String partitionCentricOutput) throws Exception {
 
+        boolean discardResult = true;
         JobExecutionResult result;
         Map<String, String> fields = new HashMap<>();
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
@@ -62,7 +65,11 @@ public class GraphSSSPRunner {
 
         PCSingleSourceShortestPaths<Long, Double> pcAlgorithm = new PCSingleSourceShortestPaths<Long, Double>(srcVertexId, Integer.MAX_VALUE, configuration);
 
-        pcAlgorithm.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        if (discardResult) {
+            pcAlgorithm.run(graph).output(new DiscardingOutputFormat<Vertex<Long, Double>>());
+        } else {
+            pcAlgorithm.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
+        }
         result = environment.execute();
 
 
