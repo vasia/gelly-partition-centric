@@ -29,6 +29,7 @@ import org.apache.flink.graph.vertex.centric.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
+import org.apache.flink.graph.vertex.centric.VertexCentricIteration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +63,11 @@ public class GraphCCRunner {
             }
             result = environment.execute();
             fields.clear();
+            fields.put(ConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
+            fields.put(ConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
+            fields.put(ConnectedComponents.ACTIVE_VER_ITER_CTR, "Active vertices");
+            fields.put(VertexCentricIteration.ITER_CTR, "Iteration count");
+            fields.put(VertexCentricIteration.ITER_TIMER, "Elapse time");
             Telemetry.printTelemetry("Vertex centric", result, fields);
             LOG.debug("Loop {} ended", i);
         }

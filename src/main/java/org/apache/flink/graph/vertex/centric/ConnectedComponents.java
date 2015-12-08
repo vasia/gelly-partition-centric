@@ -19,10 +19,12 @@
 
 package org.apache.flink.graph.vertex.centric;
 
+import org.apache.flink.api.common.accumulators.Histogram;
+import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.graph.Graph;
-import org.apache.flink.graph.GraphAlgorithm;
-import org.apache.flink.graph.Vertex;
+import org.apache.flink.api.java.tuple.Tuple;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.*;
 import org.apache.flink.graph.partition.centric.PCGraph;
 import org.apache.flink.graph.utils.NullValueEdgeMapper;
 import org.apache.flink.types.NullValue;
@@ -44,6 +46,9 @@ import org.apache.flink.types.NullValue;
  */
 @SuppressWarnings("serial")
 public class ConnectedComponents<K, EV> implements GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
+    public static final String MESSAGE_SENT_CTR = "long:message_sent";
+    public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
+    public static final String ACTIVE_VER_ITER_CTR = "histogram:active_ver_iter_ctr";
 
     private Integer maxIterations;
 
@@ -99,9 +104,34 @@ public class ConnectedComponents<K, EV> implements GraphAlgorithm<K, Long, EV, D
     public static final class CCMessenger<K> extends MessagingFunction<K, Long, Long, NullValue> {
 
         @Override
+        public void preSuperstep() throws Exception {
+            runtimeContext.addAccumulator(MESSAGE_SENT_CTR, new LongCounter());
+            runtimeContext.addAccumulator(MESSAGE_SENT_ITER_CTR, new Histogram());
+            runtimeContext.addAccumulator(ACTIVE_VER_ITER_CTR, new Histogram());
+        }
+
+        @Override
         public void sendMessages(Vertex<K, Long> vertex) throws Exception {
             // send current minimum to neighbors
-            sendMessageToAllNeighbors(vertex.getValue());
+            Histogram messageHistogram = runtimeContext.getHistogram(MESSAGE_SENT_ITER_CTR);
+            LongCounter messageCounter = runtimeContext.getLongCounter(MESSAGE_SENT_CTR);
+            Histogram vertexHistogram = runtimeContext.getHistogram(ACTIVE_VER_ITER_CTR);
+
+            if (vertexHistogram != null) {
+                vertexHistogram.add(getSuperstepNumber());
+            }
+
+            Long m = vertex.getValue();
+            Iterable<Edge<K, NullValue>> edges = getEdges();
+            for(Edge<K, NullValue> next: edges) {
+                if (messageCounter != null) {
+                    messageCounter.add(1);
+                }
+                if (messageHistogram != null) {
+                    messageHistogram.add(getSuperstepNumber());
+                }
+                sendMessageTo(next.getTarget(), m);
+            }
         }
     }
 }

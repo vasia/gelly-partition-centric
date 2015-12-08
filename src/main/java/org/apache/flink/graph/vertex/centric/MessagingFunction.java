@@ -248,13 +248,13 @@ public abstract class MessagingFunction<K, VV, Message, EV> implements Serializa
 
     private Tuple2<K, Message> outValue;
 
-    private IterationRuntimeContext runtimeContext;
+    protected IterationRuntimeContext runtimeContext;
 
     private Iterator<?> edges;
 
     private Collector<Tuple2<K, Message>> out;
 
-    private K vertexId;
+    protected K vertexId;
 
     private EdgesIterator<K, EV> edgeIterator;
 

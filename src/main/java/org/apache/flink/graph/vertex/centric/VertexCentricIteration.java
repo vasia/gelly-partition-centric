@@ -20,9 +20,12 @@ package org.apache.flink.graph.vertex.centric;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.TreeMap;
 
+import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.aggregators.Aggregator;
 import org.apache.flink.api.common.functions.FlatJoinFunction;
+import org.apache.flink.api.common.functions.IterationRuntimeContext;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.operators.DeltaIteration;
@@ -40,6 +43,7 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.partition.centric.utils.IterationTimer;
 import org.apache.flink.graph.spargel.VertexCentricConfiguration;
 import org.apache.flink.util.Collector;
 
@@ -76,6 +80,9 @@ import com.google.common.base.Preconditions;
 public class VertexCentricIteration<K, VV, Message, EV>
         implements CustomUnaryOperation<Vertex<K, VV>, Vertex<K, VV>>
 {
+    public static final String ITER_CTR = "long:iteration_counter";
+    public static final String ITER_TIMER = "iteration_timer_acc";
+
     private final VertexUpdateFunction<K, VV, Message> updateFunction;
 
     private final MessagingFunction<K, VV, Message, EV> messagingFunction;
@@ -248,9 +255,21 @@ public class VertexCentricIteration<K, VV, Message, EV>
 
         @Override
         public void open(Configuration parameters) throws Exception {
+            IterationRuntimeContext runtimeContext = getIterationRuntimeContext();
             if (getIterationRuntimeContext().getSuperstepNumber() == 1) {
-                this.vertexUpdateFunction.init(getIterationRuntimeContext());
+                this.vertexUpdateFunction.init(runtimeContext);
+                runtimeContext.addAccumulator(ITER_CTR, new LongCounter());
+                runtimeContext.addAccumulator(ITER_TIMER, new IterationTimer());
             }
+
+            LongCounter iterationCounter = runtimeContext.getLongCounter(ITER_CTR);
+            if (iterationCounter != null && runtimeContext.getIndexOfThisSubtask() == 0) {
+                iterationCounter.add(1);
+            }
+            IterationTimer timerAcc = (IterationTimer)
+                    runtimeContext.<Integer, TreeMap<Integer, Long>>getAccumulator(ITER_TIMER);
+            timerAcc.add(runtimeContext.getSuperstepNumber());
+
             this.vertexUpdateFunction.preSuperstep();
         }
 

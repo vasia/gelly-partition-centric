@@ -170,7 +170,7 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
     //  internal methods
     // --------------------------------------------------------------------------------------------
 
-    private IterationRuntimeContext runtimeContext;
+    protected IterationRuntimeContext runtimeContext;
 
     private Collector<Vertex<K, VV>> out;
 
