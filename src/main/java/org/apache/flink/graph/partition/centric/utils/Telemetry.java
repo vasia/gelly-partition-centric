@@ -26,38 +26,79 @@ import org.apache.flink.graph.vertex.centric.ConnectedComponents;
 import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
 
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 /**
  * Utilities class for Telemetry purpose
  */
 public class Telemetry {
-    public static void printTelemetry(String name, JobExecutionResult result, Map<String, String> fields) {
+    public static void printTelemetry(String name, List<JobExecutionResult> results, Map<String, String> fields) {
         System.out.println(name);
-        System.out.printf("Execution time: %s ms%n", result.getNetRuntime());
-        for(Map.Entry<String, String> field: fields.entrySet()) {
-            if (field.getKey().equals(PartitionCentricIteration.ITER_TIMER)) {
-                TreeMap<Integer, Long> out = result.getAccumulatorResult(field.getKey());
-                for (int i = 1; i <= out.size(); i++) {
-                    if (out.containsKey(i+1)) {
-                        System.out.printf("%s iteration %d: %d ms%n",
-                                field.getValue(), i, out.get(i+1) - out.get(i));
-                    } else {
-                        System.out.printf("%s iteration %d: %d ms%n",
-                                field.getValue(), i, System.currentTimeMillis() - out.get(i));
+        long runtime = 0;
+        Map<String, Map<Integer, Long>> summary = new HashMap<>();
+        for(JobExecutionResult result: results) {
+            runtime += result.getNetRuntime();
+            for(Map.Entry<String, String> field: fields.entrySet()) {
+                if (!summary.containsKey(field.getKey())) {
+                    summary.put(field.getKey(), new HashMap<Integer, Long>());
+                }
+                Map<Integer, Long> summaryByKey = summary.get(field.getKey());
+                if (field.getKey().equals(PartitionCentricIteration.ITER_TIMER)) {
+                    TreeMap<Integer, Long> out = result.getAccumulatorResult(field.getKey());
+                    for (int i = 1; i <= out.size(); i++) {
+                        long timeTotal = 0;
+                        if (out.containsKey(i+1)) {
+                            if (summaryByKey.containsKey(i)) {
+                                 timeTotal += summaryByKey.get(i);
+                            }
+                            timeTotal += out.get(i+1) - out.get(i);
+                        }
+                        summaryByKey.put(i, timeTotal);
+                    }
+                } else if (field.getKey().startsWith("long")) {
+                    long total = 0;
+                    if (summaryByKey.containsKey(0)) {
+                        total += summaryByKey.get(0);
+                    }
+                    long tmp = result.getAccumulatorResult(field.getKey());
+                    total += tmp;
+                    summaryByKey.put(0, total);
+                } else if (field.getKey().startsWith("histogram")) {
+                    TreeMap<Integer, Integer> out = result.getAccumulatorResult(field.getKey());
+                    for(Map.Entry<Integer, Integer> item: out.entrySet()) {
+                        long total = 0;
+                        if (summaryByKey.containsKey(item.getKey())) {
+                            total += summaryByKey.get(item.getKey());
+                        }
+                        total += item.getValue();
+                        summaryByKey.put(item.getKey(), total);
                     }
                 }
+            }
+        }
+
+        System.out.printf("Execution time: %d ms%n", runtime / results.size());
+        for (Map.Entry<String, String> field: fields.entrySet()) {
+            if (!summary.containsKey(field.getKey())) {
+                continue;
+            }
+            Map<Integer, Long> summaryByKey = summary.get(field.getKey());
+            if (field.getKey().equals(PartitionCentricIteration.ITER_TIMER)) {
+                for(int i = 1; i <= summaryByKey.size(); i++) {
+                    System.out.printf("%s iteration %d: %d ms%n",
+                            field.getValue(),
+                            i,
+                            summaryByKey.get(i) / results.size());
+                }
             } else if (field.getKey().startsWith("long")) {
-                Long count = result.getAccumulatorResult(field.getKey());
                 System.out.printf("%s: %d%n",
                         field.getValue(),
-                        count);
+                        summaryByKey.get(0) / results.size());
             } else if (field.getKey().startsWith("histogram")) {
-                TreeMap<Integer, Integer> out = result.getAccumulatorResult(field.getKey());
-                for(Map.Entry<Integer, Integer> item: out.entrySet()) {
+                for (int i = 1; i <= summaryByKey.size(); i++) {
+
                     System.out.printf("%s iteration %d: %d%n",
-                            field.getValue(), item.getKey(), item.getValue());
+                            field.getValue(), i, summaryByKey.get(i) / results.size());
                 }
             }
         }

@@ -32,7 +32,9 @@ import org.apache.flink.graph.vertex.centric.SingleSourceShortestPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,7 +51,6 @@ public class GraphSSSPRunner {
             String partitionCentricOutput) throws Exception {
 
         boolean discardResult = true;
-        JobExecutionResult result;
         Map<String, String> fields = new HashMap<>();
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
         configuration.setTelemetryEnabled(true);
@@ -63,7 +64,8 @@ public class GraphSSSPRunner {
         } else {
             pcAlgorithm.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
         }
-        result = environment.execute();
+        List<JobExecutionResult> results = new ArrayList<>();
+        results.add(environment.execute());
 
 
         fields.put(PCSingleSourceShortestPaths.MESSAGE_SENT_CTR, "Total messages sent");
@@ -72,7 +74,7 @@ public class GraphSSSPRunner {
         fields.put(PartitionCentricIteration.ITER_CTR, "Iteration count");
         fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
 
-        Telemetry.printTelemetry("Partition centric", result, fields);
+        Telemetry.printTelemetry("Partition centric", results, fields);
     }
 
     public static void findSsspVC(ExecutionEnvironment environment,
@@ -80,16 +82,16 @@ public class GraphSSSPRunner {
                                   Long srcVertexId,
                                   String vertexCentricOutput) throws Exception {
 
-        JobExecutionResult result;
         Map<String, String> fields = new HashMap<>();
         environment.startNewSession();
 
         SingleSourceShortestPaths<Long> vcAlgorithm = new SingleSourceShortestPaths<>(srcVertexId, Integer.MAX_VALUE);
 
         vcAlgorithm.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
-        result = environment.execute();
+        List<JobExecutionResult> results = new ArrayList<>();
+        results.add(environment.execute());
         fields.clear();
 
-        Telemetry.printTelemetry("Vertex centric", result, fields);
+        Telemetry.printTelemetry("Vertex centric", results, fields);
     }
 }
