@@ -20,6 +20,7 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.accumulators.Accumulator;
+import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.aggregators.Aggregator;
 import org.apache.flink.api.common.functions.IterationRuntimeContext;
 import org.apache.flink.api.common.functions.RichCoGroupFunction;
@@ -59,6 +60,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         CustomUnaryOperation<Vertex<K, VV>, Vertex<K, VV>> {
 
     public static final String ITER_TIMER = "iteration_timer_acc";
+    public static final String ITER_CTR = "long:iteration_counter";
 
     private static final Logger LOG = LoggerFactory.getLogger(PartitionCentricIteration.class);
 
@@ -108,15 +110,17 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                 initialVertices.iterateDelta(initialVertices, maxIteration, 0);
         String defaultName = "Partition-centric iteration (" + partitionProcessFunction + " | " + vertexUpdateFunction + ")";
         HashMap<String, Accumulator<?, ?>> accumulators = null;
+        boolean telemetryEnabled;
         if (configuration != null) {
             iteration.name(configuration.getName(defaultName));
             // Register aggregator for per-iteration statistic
             for(Map.Entry<String, Aggregator<?>> entry: configuration.getAggregators().entrySet()) {
                 iteration.registerAggregator(entry.getKey(), entry.getValue());
             }
-            accumulators = configuration.getAccumulators();
+            telemetryEnabled = configuration.isTelemetryEnabled();
         } else {
             iteration.name(defaultName);
+            telemetryEnabled = false;
         }
 
         // Join the edges into the vertices
@@ -128,13 +132,13 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                                         ((TupleTypeInfo<?>) vertexType).getTypeAt(1),
                                         edgeType
                                 ),
-                                accumulators
+                                telemetryEnabled
                             )
                         );
 
         // Update the partition, receive a dataset of message
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
-                new PartitionUpdateUdf<>(partitionProcessFunction, messageTypeInfo, accumulators);
+                new PartitionUpdateUdf<>(partitionProcessFunction, messageTypeInfo);
         DataSet<Tuple2<K, Message>> messages =
                 vertexEdges.mapPartition(partitionUpdater);
 
@@ -142,7 +146,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         DataSet<Vertex<K, VV>> updatedVertices =
                 messages.coGroup(iteration.getSolutionSet())
                         .where(0).equalTo(0)
-                        .with(new VertexUpdateUdf<>(vertexUpdateFunction, accumulators));
+                        .with(new VertexUpdateUdf<>(vertexUpdateFunction));
 
         // Finish iteration
         return iteration.closeWith(updatedVertices, updatedVertices);
@@ -168,15 +172,12 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 
         private final PartitionProcessFunction<K, VV, Message, EV> updateFunction;
         private transient TypeInformation<Tuple2<K, Message>> resultType;
-        private final HashMap<String, Accumulator<?, ?>> accumulators;
 
         private PartitionUpdateUdf(
                 PartitionProcessFunction<K, VV, Message, EV> updateFunction,
-                TypeInformation<Tuple2<K, Message>> resultType,
-                HashMap<String, Accumulator<?, ?>> accumulators) {
+                TypeInformation<Tuple2<K, Message>> resultType) {
             this.updateFunction = updateFunction;
             this.resultType = resultType;
-            this.accumulators = accumulators;
         }
 
         @Override
@@ -184,11 +185,12 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             if (getIterationRuntimeContext().getSuperstepNumber() == 1) {
                 this.updateFunction.init(getIterationRuntimeContext());
             }
-            if (accumulators != null) {
-                for(Map.Entry<String, Accumulator<?, ?>> entry: accumulators.entrySet()) {
-                    getRuntimeContext().addAccumulator(entry.getKey(), entry.getValue());
-                }
-            }
+            this.updateFunction.preSuperstep();
+        }
+
+        @Override
+        public void close() throws Exception {
+            this.updateFunction.postSuperStep();
         }
 
         @Override
@@ -217,13 +219,10 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                     Tuple2<K, Message>, Vertex<K, VV>,
                     Vertex<K, VV>> {
         private final VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction;
-        private final HashMap<String, Accumulator<?, ?>> accumulators;
 
         private VertexUpdateUdf(
-                VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
-                HashMap<String, Accumulator<?, ?>> accumulators) {
+                VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction) {
             this.vertexUpdateFunction = vertexUpdateFunction;
-            this.accumulators = accumulators;
         }
 
         @Override
@@ -231,11 +230,12 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             if (getIterationRuntimeContext().getSuperstepNumber() == 1) {
                 this.vertexUpdateFunction.init(getIterationRuntimeContext());
             }
-            if (accumulators != null) {
-                for(Map.Entry<String, Accumulator<?, ?>> entry: accumulators.entrySet()) {
-                    getRuntimeContext().addAccumulator(entry.getKey(), entry.getValue());
-                }
-            }
+            this.vertexUpdateFunction.preSuperStep();
+        }
+
+        @Override
+        public void close() throws Exception {
+            this.vertexUpdateFunction.postSuperStep();
         }
 
         @Override
@@ -259,25 +259,27 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             ResultTypeQueryable<Tuple2<VV, Edge<K, EV>>>{
 
         private transient final TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType;
-        private final HashMap<String, Accumulator<?, ?>> accumulators;
+        private final boolean telemetryEnabled;
 
-        private AdjacencyListBuilder(TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType, HashMap<String, Accumulator<?, ?>> accumulators) {
+        private AdjacencyListBuilder(TypeInformation<Tuple2<VV, Edge<K, EV>>> resultType, boolean telemetryEnabled) {
             this.resultType = resultType;
-            this.accumulators = accumulators;
+            this.telemetryEnabled = telemetryEnabled;
         }
 
         @Override
         public void open(Configuration parameters) throws Exception {
             super.open(parameters);
             IterationRuntimeContext context = getIterationRuntimeContext();
-            if (accumulators != null) {
-                for(Map.Entry<String, Accumulator<?, ?>> entry: accumulators.entrySet()) {
-                    context.addAccumulator(entry.getKey(), entry.getValue());
-                }
+            if (telemetryEnabled) {
+                context.addAccumulator(ITER_TIMER, new IterationTimer());
                 IterationTimer timerAcc = (IterationTimer)
                         context.<Integer, TreeMap<Integer, Long>>getAccumulator(ITER_TIMER);
-                if (timerAcc != null) {
-                    timerAcc.add(context.getSuperstepNumber());
+                timerAcc.add(context.getSuperstepNumber());
+
+                context.addAccumulator(ITER_CTR, new LongCounter());
+                LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
+                if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
+                    iterationCounter.add(1);
                 }
             }
         }

@@ -47,14 +47,14 @@ public class PCConnectedComponents<K, EV> implements
     public static final String MESSAGE_SENT_CTR = "long:message_sent";
     public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
     public static final String ACTIVE_VER_ITER_CTR = "histogram:active_ver_iter_ctr";
-    public static final String ITER_CTR = "long:iteration_counter";
+
 
     private int maxIteration;
     private final PartitionCentricConfiguration configuration;
 
     public PCConnectedComponents(int maxIteration) {
         this.maxIteration = maxIteration;
-        this.configuration = null;
+        this.configuration = new PartitionCentricConfiguration();
     }
 
     public PCConnectedComponents(int maxIteration, PartitionCentricConfiguration configuration) {
@@ -70,7 +70,7 @@ public class PCConnectedComponents<K, EV> implements
 
         Graph<K, Long, NullValue> result =
                 pcGraph.runPartitionCentricIteration(
-                        new CCPartitionProcessFunction<K, NullValue>(),
+                        new CCPartitionProcessFunction<K, NullValue>(configuration.isTelemetryEnabled()),
                         new CCVertexUpdateFunction<K, NullValue>(),
                         configuration, maxIteration);
 
@@ -84,6 +84,24 @@ public class PCConnectedComponents<K, EV> implements
             PartitionProcessFunction<K, Long, Long, EV> {
         private static final long serialVersionUID = 1L;
         private static final Logger LOG = LoggerFactory.getLogger(CCPartitionProcessFunction.class);
+        private final boolean telemetryEnabled;
+
+        public CCPartitionProcessFunction() {
+            telemetryEnabled = false;
+        }
+
+        public CCPartitionProcessFunction(boolean telemetryEnabled) {
+            this.telemetryEnabled = telemetryEnabled;
+        }
+
+        @Override
+        public void preSuperstep() {
+            if (telemetryEnabled) {
+                context.addAccumulator(MESSAGE_SENT_CTR, new LongCounter());
+                context.addAccumulator(MESSAGE_SENT_ITER_CTR, new Histogram());
+                context.addAccumulator(ACTIVE_VER_ITER_CTR, new Histogram());
+            }
+        }
 
         @Override
         public void processPartition(Iterable<Tuple2<Long, Edge<K, EV>>> vertices) throws Exception {
@@ -125,12 +143,9 @@ public class PCConnectedComponents<K, EV> implements
 
             Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
             LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
-            LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
             Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
 
-            if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
-                iterationCounter.add(1);
-            }
+
 
             // Send messages to update nodes' value
             for(Map.Entry<K, UnionFindNode<Long>> entry: nodeStore.entrySet()) {

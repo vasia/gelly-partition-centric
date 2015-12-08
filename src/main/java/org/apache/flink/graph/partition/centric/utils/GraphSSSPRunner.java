@@ -20,17 +20,15 @@
 package org.apache.flink.graph.partition.centric.utils;
 
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.accumulators.Histogram;
-import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.io.DiscardingOutputFormat;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.library.SingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PCSingleSourceShortestPaths;
 import org.apache.flink.graph.partition.centric.PartitionCentricConfiguration;
 import org.apache.flink.graph.partition.centric.PartitionCentricIteration;
+import org.apache.flink.graph.vertex.centric.SingleSourceShortestPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,12 +52,7 @@ public class GraphSSSPRunner {
         JobExecutionResult result;
         Map<String, String> fields = new HashMap<>();
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
-
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.MESSAGE_SENT_CTR, new LongCounter());
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.MESSAGE_SENT_ITER_CTR, new Histogram());
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.ITER_CTR, new LongCounter());
-        configuration.registerAccumulator(PCSingleSourceShortestPaths.ACTIVE_VER_ITER_CTR, new Histogram());
-        configuration.registerAccumulator(PartitionCentricIteration.ITER_TIMER, new IterationTimer());
+        configuration.setTelemetryEnabled(true);
 
         environment.startNewSession();
 
@@ -75,8 +68,8 @@ public class GraphSSSPRunner {
 
         fields.put(PCSingleSourceShortestPaths.MESSAGE_SENT_CTR, "Total messages sent");
         fields.put(PCSingleSourceShortestPaths.MESSAGE_SENT_ITER_CTR, "Messages sent");
-        fields.put(PCSingleSourceShortestPaths.ITER_CTR, "Iteration count");
         fields.put(PCSingleSourceShortestPaths.ACTIVE_VER_ITER_CTR, "Active vertices");
+        fields.put(PartitionCentricIteration.ITER_CTR, "Iteration count");
         fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
 
         Telemetry.printTelemetry("Partition centric", result, fields);

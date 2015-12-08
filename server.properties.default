@@ -18,7 +18,7 @@
 #
 
 # Rename this file to server.properties and replace 
-# server_address with the actual address of out sky3 server
+# server_address with the actual address of out sky4 server
 inputRoot=hdfs://server_address:50040/gelly-partition-centric/data/
 outputRoot=hdfs://server_address:50040/gelly-partition-centric/out/
 flinkMasterURI=server_address

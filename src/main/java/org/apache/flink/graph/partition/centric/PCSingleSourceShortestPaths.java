@@ -10,13 +10,10 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.utils.NullValueEdgeMapper;
-import org.apache.flink.types.NullValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.function.Consumer;
 
 
 /**
@@ -30,7 +27,6 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
     public static final String MESSAGE_SENT_CTR = "long:message_sent";
     public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
     public static final String ACTIVE_VER_ITER_CTR = "histogram:active_ver_iter_ctr";
-    public static final String ITER_CTR = "long:iteration_counter";
 
     private K srcVertexId;
     private int maxIterations;
@@ -45,7 +41,7 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
     public PCSingleSourceShortestPaths(K srcVertexId, int maxIterations) {
         this.srcVertexId = srcVertexId;
         this.maxIterations = maxIterations;
-        this.configuration = null;
+        this.configuration = new PartitionCentricConfiguration();
     }
 
     /**
@@ -83,7 +79,7 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
 
         Graph<K, Double, EV> result =
                 pcGraph.runPartitionCentricIteration(
-                        new SSSPPartitionProcessFunction<K, EV>(),
+                        new SSSPPartitionProcessFunction<K, EV>(configuration.isTelemetryEnabled()),
                         new SSSPVertexUpdateFunction<K, EV>(),
                         configuration, maxIterations);
 
@@ -118,6 +114,24 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
 
         private static final long serialVersionUID = 1L;
         private static final Logger LOG = LoggerFactory.getLogger(SSSPPartitionProcessFunction.class);
+        private final boolean telemetryEnabled;
+
+        public SSSPPartitionProcessFunction() {
+            telemetryEnabled = false;
+        }
+
+        public SSSPPartitionProcessFunction(boolean telemetryEnabled) {
+            this.telemetryEnabled = telemetryEnabled;
+        }
+
+        @Override
+        public void preSuperstep() {
+            if (telemetryEnabled) {
+                context.addAccumulator(MESSAGE_SENT_CTR, new LongCounter());
+                context.addAccumulator(MESSAGE_SENT_ITER_CTR, new Histogram());
+                context.addAccumulator(ACTIVE_VER_ITER_CTR, new Histogram());
+            }
+        }
 
         private Map<K, Double> distance;
         private Set<Tuple2<Double, Edge<K, EV>>> valueEdges;
@@ -143,17 +157,12 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
 
             Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
             LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
-            LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
             Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
 
             //Send minimum path values to target vertices
             for (HashMap.Entry<K, Double> targetVertex : distance.entrySet()) {
 
                 sendMessage(targetVertex.getKey(), targetVertex.getValue());
-
-                if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
-                    iterationCounter.add(1);
-                }
 
                 if (messageCounter != null) {
                     messageCounter.add(1);

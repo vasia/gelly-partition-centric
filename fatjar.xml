@@ -35,6 +35,7 @@
             <includes>
                 <include>org.apache.flink:gelly-partition-centric</include>
                 <include>org.apache.flink:flink-gelly</include>
+                <include>com.google.common:guava</include>
             </includes>
         </dependencySet>
     </dependencySets>

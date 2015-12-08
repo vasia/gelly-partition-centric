@@ -51,6 +51,18 @@ public abstract class PartitionProcessFunction<K, VV, Message, EV> implements Se
     }
 
     /**
+     * This method is called before every superstep
+     */
+    public void preSuperstep() {
+    }
+
+    /**
+     * This method is called after every superstep
+     */
+    public void postSuperStep() {
+    }
+
+    /**
      * Call this method to send a message to a vertex
      * @param vertex The destination vertex's id
      * @param message The message content

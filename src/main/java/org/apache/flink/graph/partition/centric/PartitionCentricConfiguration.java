@@ -28,14 +28,13 @@ import java.util.HashMap;
  * Configuration object for a partition centric iteration
  */
 public class PartitionCentricConfiguration extends IterationConfiguration {
-    private HashMap<String, Accumulator<?, ?>> accumulators = new HashMap<>();
+    private boolean telemetryEnabled;
 
-    public void registerAccumulator(String name, Accumulator<?, ?> accumulator) {
-        accumulators.put(name, accumulator);
+    public boolean isTelemetryEnabled() {
+        return telemetryEnabled;
     }
 
-    public HashMap<String, Accumulator<?, ?>> getAccumulators() {
-        return accumulators;
+    public void setTelemetryEnabled(boolean telemetryEnabled) {
+        this.telemetryEnabled = telemetryEnabled;
     }
-
 }
