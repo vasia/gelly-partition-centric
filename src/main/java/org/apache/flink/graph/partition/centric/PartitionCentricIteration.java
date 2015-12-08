@@ -20,6 +20,7 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.accumulators.Accumulator;
+import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.aggregators.Aggregator;
 import org.apache.flink.api.common.functions.IterationRuntimeContext;
 import org.apache.flink.api.common.functions.RichCoGroupFunction;
@@ -59,6 +60,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         CustomUnaryOperation<Vertex<K, VV>, Vertex<K, VV>> {
 
     public static final String ITER_TIMER = "iteration_timer_acc";
+    public static final String ITER_CTR = "long:iteration_counter";
 
     private static final Logger LOG = LoggerFactory.getLogger(PartitionCentricIteration.class);
 
@@ -273,6 +275,12 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
                 IterationTimer timerAcc = (IterationTimer)
                         context.<Integer, TreeMap<Integer, Long>>getAccumulator(ITER_TIMER);
                 timerAcc.add(context.getSuperstepNumber());
+
+                context.addAccumulator(ITER_CTR, new LongCounter());
+                LongCounter iterationCounter = context.getLongCounter(ITER_CTR);
+                if (iterationCounter != null && context.getIndexOfThisSubtask() == 0) {
+                    iterationCounter.add(1);
+                }
             }
         }
 

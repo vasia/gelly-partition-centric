@@ -61,8 +61,8 @@ public class GraphSSSPRunner {
 
         fields.put(PCSingleSourceShortestPaths.MESSAGE_SENT_CTR, "Total messages sent");
         fields.put(PCSingleSourceShortestPaths.MESSAGE_SENT_ITER_CTR, "Messages sent");
-        fields.put(PCSingleSourceShortestPaths.ITER_CTR, "Iteration count");
         fields.put(PCSingleSourceShortestPaths.ACTIVE_VER_ITER_CTR, "Active vertices");
+        fields.put(PartitionCentricIteration.ITER_CTR, "Iteration count");
         fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
 
         Telemetry.printTelemetry("Partition centric", result, fields);

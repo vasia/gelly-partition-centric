@@ -78,6 +78,7 @@ public class GraphCCRunner {
             JobExecutionResult result;
             PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
             configuration.setTelemetryEnabled(true);
+            Map<String, String> fields = new HashMap<>();
 
             environment.startNewSession();
             PCConnectedComponents<K, EV> algo = new PCConnectedComponents<>(
@@ -88,11 +89,10 @@ public class GraphCCRunner {
                 algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
             }
             result = environment.execute();
-            Map<String, String> fields = new HashMap<>();
             fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
             fields.put(PCConnectedComponents.MESSAGE_SENT_ITER_CTR, "Messages sent");
-            fields.put(PCConnectedComponents.ITER_CTR, "Iteration count");
             fields.put(PCConnectedComponents.ACTIVE_VER_ITER_CTR, "Active vertices");
+            fields.put(PartitionCentricIteration.ITER_CTR, "Iteration count");
             fields.put(PartitionCentricIteration.ITER_TIMER, "Elapse time");
             Telemetry.printTelemetry("Partition centric", result, fields);
             LOG.debug("Loop {} ended", i);
