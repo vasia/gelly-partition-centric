@@ -136,45 +136,49 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
         private Map<K, Double> distance;
         private Set<Tuple2<Double, Edge<K, EV>>> valueEdges;
         private Set<Vertex<K, Double>> unSettledVertices;
-        private Set<Vertex<K, Double>> settledVertices;
+        private Map<K, Double> settledVertices;
 
         @Override
         public void processPartition(Iterable<Tuple2<Double, Edge<K, EV>>> vertices) throws Exception {
             valueEdges = new HashSet<Tuple2<Double, Edge<K, EV>>>();
             unSettledVertices = new HashSet<Vertex<K, Double>>();
-            settledVertices = new HashSet<Vertex<K, Double>>();
+            settledVertices = new HashMap<K, Double>();
             distance = new HashMap<K, Double>();
 
             Vertex<K, Double> minVertex = findMinimumValue(vertices.iterator());
-            unSettledVertices.add(minVertex);
 
-            while (!unSettledVertices.isEmpty()) {
-                Vertex<K, Double> vertex = findSmallestValue(unSettledVertices);
-                settledVertices.add(vertex);
-                unSettledVertices.remove(vertex);
-                findNeighbours(vertex, valueEdges.iterator());
-            }
+            if (minVertex.getValue() < Double.MAX_VALUE) {
 
-            Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
-            LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
-            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
+                unSettledVertices.add(minVertex);
 
-            //Send minimum path values to target vertices
-            for (HashMap.Entry<K, Double> targetVertex : distance.entrySet()) {
-
-                sendMessage(targetVertex.getKey(), targetVertex.getValue());
-
-                if (messageCounter != null) {
-                    messageCounter.add(1);
-                }
-                if (messageHistogram != null) {
-                    messageHistogram.add(context.getSuperstepNumber());
+                while (!unSettledVertices.isEmpty()) {
+                    Vertex<K, Double> vertex = findSmallestValue(unSettledVertices);
+                    settledVertices.put(vertex.getId(), vertex.getValue());
+                    unSettledVertices.remove(vertex);
+                    findNeighbours(vertex, valueEdges.iterator());
                 }
 
-                //Since a vertex can send multiple messages in one iteration,    && !partitionVertices.contains(targetVertice.getKey())
-                //we need to count only the local receiving vertices
-                if (vertexHistogram != null) {
-                    vertexHistogram.add(context.getSuperstepNumber());
+                Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
+                LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
+                Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
+
+                //Send minimum path values to target vertices
+                for (HashMap.Entry<K, Double> targetVertex : distance.entrySet()) {
+
+                    sendMessage(targetVertex.getKey(), targetVertex.getValue());
+
+                    if (messageCounter != null) {
+                        messageCounter.add(1);
+                    }
+                    if (messageHistogram != null) {
+                        messageHistogram.add(context.getSuperstepNumber());
+                    }
+
+                    //Since a vertex can send multiple messages in one iteration,    && !partitionVertices.contains(targetVertice.getKey())
+                    //we need to count only the local receiving vertices
+                    if (vertexHistogram != null) {
+                        vertexHistogram.add(context.getSuperstepNumber());
+                    }
                 }
             }
         }
@@ -215,13 +219,16 @@ public class PCSingleSourceShortestPaths<K, EV> implements GraphAlgorithm<K, Dou
                 if (edge.getSource() == sourceVertex.getId()) {
                     Vertex<K, Double> neighbour = new Vertex<K, Double>(edge.getTarget(), vertex.f0 + (Double)edge.getValue());
 
-                    if (!settledVertices.contains(neighbour)) {
-                        Double oldValue = distance.getOrDefault(neighbour.getId(), Double.MAX_VALUE);
+                    if (!settledVertices.containsKey(neighbour.getId())) {
+                        Double oldValue = distance.get(neighbour.getId());
+                        oldValue = (oldValue == null)? Double.MAX_VALUE : oldValue;
 
                         if (oldValue > neighbour.getValue()) {
                             distance.put(neighbour.getId(), neighbour.getValue());
                             unSettledVertices.add(neighbour);
                         }
+                    } else {
+                        valueEdges.remove(vertex);
                     }
                 }
             }
