@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.flink.graph.partition.centric.performance;
+package org.apache.flink.graph.partition.centric.performance.cc;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Graph;

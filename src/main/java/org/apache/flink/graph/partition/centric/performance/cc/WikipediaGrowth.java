@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.flink.graph.partition.centric.performance;
+package org.apache.flink.graph.partition.centric.performance.cc;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Graph;
@@ -26,9 +26,10 @@ import org.apache.flink.graph.partition.centric.utils.GraphCCRunner;
 import org.apache.flink.types.NullValue;
 
 /**
- * Testing the PCConnectedComponents on Twitter Munmun dataset
+ * Created by dikei on 12/8/15.
  */
-public class WebGoogle {
+public class WikipediaGrowth {
+
     public static void main(String[] args) throws Exception {
 
         EnvironmentWrapper wrapper;
@@ -48,17 +49,16 @@ public class WebGoogle {
 
         Graph<Long, Long, NullValue> graph = Graph
                 .fromCsvReader(
-                        wrapper.getInputRoot() + "web-Google/web-Google.data",
+                        wrapper.getInputRoot() + "wikipedia-growth/out.wikipedia-growth.data",
                         new MapFunction<Object, Object>() {
                             @Override
                             public Object map(Object value) throws Exception {
                                 return value;
                             }
-                        },
-                        wrapper.getEnvironment())
-                .fieldDelimiterEdges("\t")
+                        }, wrapper.getEnvironment())
+                .fieldDelimiterEdges(" ")
                 .lineDelimiterEdges("\n")
-                .ignoreCommentsEdges("#")
+                .ignoreCommentsEdges("%")
                 .vertexTypes(Long.class, Long.class);
 
         switch (args[0]) {
@@ -66,17 +66,17 @@ public class WebGoogle {
                 GraphCCRunner.detectComponentPC(
                         wrapper.getEnvironment(),
                         graph,
-                        wrapper.getOutputRoot() + "pcgoogle",
+                        wrapper.getOutputRoot() + "pcwikigrowth",
                         true,
-                        10);
+                        1);
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
                         wrapper.getEnvironment(),
                         graph,
-                        wrapper.getOutputRoot() + "vcgoogle",
+                        wrapper.getOutputRoot() + "vcwikigrowth",
                         true,
-                        10);
+                        1);
                 break;
             default:
                 printErr();
@@ -86,10 +86,10 @@ public class WebGoogle {
 
     private static void printErr() {
         System.err.println("Please choose benchmark to run.");
-        System.err.printf("Run \"java %s pc local\" for local partition-centric%n", WebGoogle.class);
-        System.err.printf("Run \"java %s vc local\" for local vertex-centric%n", WebGoogle.class);
-        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", WebGoogle.class);
-        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", WebGoogle.class);
+        System.err.printf("Run \"java %s pc local\" for local partition-centric%n", WikipediaGrowth.class);
+        System.err.printf("Run \"java %s vc local\" for local vertex-centric%n", WikipediaGrowth.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", WikipediaGrowth.class);
+        System.err.printf("Run \"java %s pc remote\" for remote partition-centric%n", WikipediaGrowth.class);
         System.exit(-1);
     }
 }

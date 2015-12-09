@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.flink.graph.partition.centric.performance;
+package org.apache.flink.graph.partition.centric.performance.cc;
 
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Graph;
