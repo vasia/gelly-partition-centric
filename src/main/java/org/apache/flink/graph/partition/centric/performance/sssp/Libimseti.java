@@ -61,7 +61,7 @@ public class Libimseti {
                     }
                 });
 
-        int i = 1;
+        int i = Integer.parseInt(args[3]);
 
         switch (args[0]) {
             case "pc":
@@ -69,7 +69,7 @@ public class Libimseti {
                     GraphSSSPRunner.findSsspPC(
                             wrapper.getEnvironment(),
                             graph,
-                            1L,
+                            Long.parseLong(args[2]),
                             wrapper.getOutputRoot() + "pc_libimseti"
                     );
                     i--;
@@ -80,7 +80,7 @@ public class Libimseti {
                     GraphSSSPRunner.findSsspVC(
                             wrapper.getEnvironment(),
                             graph,
-                            Long.getLong(args[2]),
+                            Long.parseLong(args[2]),
                             wrapper.getOutputRoot() + "vc_libimseti");
                     i--;
                 }

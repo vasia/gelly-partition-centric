@@ -43,7 +43,7 @@ public class HiggsRetweetNetwork {
                     }
                 });
 
-        int i = 5;
+        int i = Integer.parseInt(args[3]);
 
         switch (args[0]) {
             case "pc":
@@ -51,7 +51,7 @@ public class HiggsRetweetNetwork {
                     GraphSSSPRunner.findSsspPC(
                             wrapper.getEnvironment(),
                             graph,
-                            1L,
+                            Long.parseLong(args[2]),
                             wrapper.getOutputRoot() + "pc_higgs-retweet_network"
                     );
                     i--;
@@ -62,7 +62,7 @@ public class HiggsRetweetNetwork {
                     GraphSSSPRunner.findSsspVC(
                             wrapper.getEnvironment(),
                             graph,
-                            Long.getLong(args[2]),
+                            Long.parseLong(args[2]),
                             wrapper.getOutputRoot() + "vc_higgs-retweet_network");
                     i--;
                 }

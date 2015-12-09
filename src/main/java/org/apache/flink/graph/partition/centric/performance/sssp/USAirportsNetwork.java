@@ -62,14 +62,14 @@ public class USAirportsNetwork {
                     }
                 });
 
-        Integer i = 15;
+        int i = Integer.parseInt(args[3]);
         switch (args[0]) {
             case "pc":
                 while (i > 0) {
                     GraphSSSPRunner.findSsspPC(
                             wrapper.getEnvironment(),
                             graph,
-                            1L,
+                            Long.parseLong(args[2]),
                             wrapper.getOutputRoot() + "pc_usairport"
                     );
                     i--;
@@ -80,7 +80,7 @@ public class USAirportsNetwork {
                     GraphSSSPRunner.findSsspVC(
                             wrapper.getEnvironment(),
                             graph,
-                            1L,
+                            Long.parseLong(args[2]),
                             wrapper.getOutputRoot() + "vc_usairport");
                     i--;
                 }
