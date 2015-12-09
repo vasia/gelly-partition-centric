@@ -18,6 +18,8 @@
 
 package org.apache.flink.graph.vertex.centric;
 
+import org.apache.flink.api.common.accumulators.Histogram;
+import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.graph.Edge;
@@ -32,6 +34,9 @@ import org.apache.flink.types.NullValue;
  */
 @SuppressWarnings("serial")
 public class SingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double, Double, DataSet<Vertex<K, Double>>> {
+    public static final String MESSAGE_SENT_CTR = "long:message_sent";
+    public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
+    public static final String ACTIVE_VER_ITER_CTR = "histogram:active_ver_iter_ctr";
 
     private final K srcVertexId;
     private final Integer maxIterations;
@@ -110,9 +115,32 @@ public class SingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double, D
     public static final class MinDistanceMessenger<K> extends MessagingFunction<K, Double, Double, Double> {
 
         @Override
+        public void preSuperstep() throws Exception {
+            runtimeContext.addAccumulator(MESSAGE_SENT_CTR, new LongCounter());
+            runtimeContext.addAccumulator(MESSAGE_SENT_ITER_CTR, new Histogram());
+            runtimeContext.addAccumulator(ACTIVE_VER_ITER_CTR, new Histogram());
+        }
+
+        @Override
         public void sendMessages(Vertex<K, Double> vertex)
                 throws Exception {
+
+            // send current minimum to neighbors
+            Histogram messageHistogram = runtimeContext.getHistogram(MESSAGE_SENT_ITER_CTR);
+            LongCounter messageCounter = runtimeContext.getLongCounter(MESSAGE_SENT_CTR);
+            Histogram vertexHistogram = runtimeContext.getHistogram(ACTIVE_VER_ITER_CTR);
+
+            if (vertexHistogram != null) {
+                vertexHistogram.add(getSuperstepNumber());
+            }
+
             for (Edge<K, Double> edge : getEdges()) {
+                if (messageCounter != null) {
+                    messageCounter.add(1);
+                }
+                if (messageHistogram != null) {
+                    messageHistogram.add(getSuperstepNumber());
+                }
                 sendMessageTo(edge.getTarget(), vertex.getValue() + edge.getValue());
             }
         }
