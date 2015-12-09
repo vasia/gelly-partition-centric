@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.flink.graph.partition.centric.performance;
+package org.apache.flink.graph.partition.centric.performance.sssp;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Graph;
@@ -61,7 +61,7 @@ public class Libimseti {
                     }
                 });
 
-        int i = 15;
+        int i = 1;
 
         switch (args[0]) {
             case "pc":
@@ -69,7 +69,7 @@ public class Libimseti {
                     GraphSSSPRunner.findSsspPC(
                             wrapper.getEnvironment(),
                             graph,
-                            Long.getLong(args[2]),
+                            1L,
                             wrapper.getOutputRoot() + "pc_libimseti"
                     );
                     i--;
