@@ -28,6 +28,8 @@ import org.apache.flink.api.common.functions.RichJoinFunction;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsFirst;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsSecond;
 import org.apache.flink.api.java.operators.CustomUnaryOperation;
 import org.apache.flink.api.java.operators.DeltaIteration;
 import org.apache.flink.api.java.operators.JoinOperator;
@@ -254,6 +256,8 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         }
     }
 
+    @ForwardedFieldsFirst("f1->f0")
+    @ForwardedFieldsSecond("*->f1")
     private static class AdjacencyListBuilder<K, VV, EV> extends
             RichJoinFunction<Vertex<K,VV>, Edge<K, EV>, Tuple2<VV, Edge<K, EV>>> implements
             ResultTypeQueryable<Tuple2<VV, Edge<K, EV>>>{
