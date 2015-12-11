@@ -26,7 +26,7 @@ public class PCSingleSourceShortestPathsTest {
         Graph<Long, Double, Double> graph = GraphGenerator.generateSSSPGraph(environment);
         Long srcVertexId = SingleSourceShortestPathsData.SRC_VERTEX_ID;
 
-        PCSingleSourceShortestPaths<Long, Double> algo = new PCSingleSourceShortestPaths<Long, Double>(srcVertexId, ((int) graph.numberOfVertices()));
+        PCSingleSourceShortestPaths<Long> algo = new PCSingleSourceShortestPaths<Long>(srcVertexId, ((int) graph.numberOfVertices()));
 
         List<Tuple2<Long, Double>> result = algo.run(graph).map(
                 new RichMapFunction<Vertex<Long, Double>, Tuple2<Long, Double>>() {

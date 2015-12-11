@@ -51,14 +51,14 @@ public class GraphSSSPRunner {
             Long srcVertexId,
             String partitionCentricOutput) throws Exception {
 
-        boolean discardResult = true;
+        boolean discardResult = false;
         Map<String, String> fields = new HashMap<>();
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
         configuration.setTelemetryEnabled(true);
 
         environment.startNewSession();
 
-        PCSingleSourceShortestPaths<Long, Double> pcAlgorithm = new PCSingleSourceShortestPaths<Long, Double>(srcVertexId, Integer.MAX_VALUE, configuration);
+        PCSingleSourceShortestPaths<Long> pcAlgorithm = new PCSingleSourceShortestPaths<Long>(srcVertexId, Integer.MAX_VALUE, configuration);
 
         if (discardResult) {
             pcAlgorithm.run(graph).output(new DiscardingOutputFormat<Vertex<Long, Double>>());
