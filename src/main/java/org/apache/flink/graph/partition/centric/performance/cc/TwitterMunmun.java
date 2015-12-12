@@ -63,6 +63,7 @@ public class TwitterMunmun {
         switch (args[0]) {
             case "pc":
                 GraphCCRunner.detectComponentPC(
+                        "Twitter Partition Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "pctwitter",
@@ -71,6 +72,7 @@ public class TwitterMunmun {
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
+                        "Twitter Vertex Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "vctwitter",

@@ -45,6 +45,7 @@ public class GraphCCRunner {
     private final static Logger LOG = LoggerFactory.getLogger(GraphCCRunner.class);
 
     public static <K, EV> void detectComponentVC(
+            String name,
             ExecutionEnvironment environment,
             Graph<K, Long, EV> graph,
             String vertexCentricOutput,
@@ -68,17 +69,19 @@ public class GraphCCRunner {
             } else {
                 vcAlgo.run(graph).writeAsCsv(vertexCentricOutput, FileSystem.WriteMode.OVERWRITE);
             }
-            results.add(environment.execute());
+            results.add(environment.execute(name));
             LOG.debug("Loop {} ended", i);
         }
         Telemetry.printTelemetry("Vertex centric", results, fields);
     }
 
-    public static <K, EV> void detectComponentPC(ExecutionEnvironment environment,
-                                                 Graph<K, Long, EV> graph,
-                                                 String partitionCentricOutput,
-                                                 boolean discardOutput,
-                                                 int loopCount) throws Exception {
+    public static <K, EV> void detectComponentPC(
+            String name,
+            ExecutionEnvironment environment,
+            Graph<K, Long, EV> graph,
+            String partitionCentricOutput,
+            boolean discardOutput,
+            int loopCount) throws Exception {
         LOG.debug("Preparing to run partition centric iteration in {} loops", loopCount);
         Map<String, String> fields = new HashMap<>();
         fields.put(PCConnectedComponents.MESSAGE_SENT_CTR, "Total messages sent");
@@ -101,7 +104,7 @@ public class GraphCCRunner {
             } else {
                 algo.run(graph).writeAsCsv(partitionCentricOutput, FileSystem.WriteMode.OVERWRITE);
             }
-            results.add(environment.execute());
+            results.add(environment.execute(name));
             LOG.debug("Loop {} ended", i);
         }
         Telemetry.printTelemetry("Partition centric", results, fields);

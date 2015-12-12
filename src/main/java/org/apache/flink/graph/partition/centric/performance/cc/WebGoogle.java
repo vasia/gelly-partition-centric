@@ -64,6 +64,7 @@ public class WebGoogle {
         switch (args[0]) {
             case "pc":
                 GraphCCRunner.detectComponentPC(
+                        "Google Partition Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "pcgoogle",
@@ -72,6 +73,7 @@ public class WebGoogle {
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
+                        "Google Vertex Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "vcgoogle",
