@@ -131,17 +131,18 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
         }
 
         private Map<K, Double> distance;
-        private Set<Tuple2<Double, Edge<K, Double>>> valueEdges;
         private Set<K> settledVertices;
         private PriorityQueue<Vertex<K, Double>> unSettledVertices;
+        private Map<K, ArrayList<Tuple2<K, Double>>> vertexNeighbours;
 
         @Override
         public void processPartition(Iterable<Tuple2<Double, Edge<K, Double>>> vertices) throws Exception {
-            valueEdges = new HashSet<>();
+
             settledVertices = new HashSet<>();
             distance = new HashMap<>();
+            vertexNeighbours = new HashMap<>();
 
-            unSettledVertices = new PriorityQueue<>(new Comparator<Vertex<K, Double>>() {
+            unSettledVertices = new PriorityQueue<>(100, new Comparator<Vertex<K, Double>>() {
                 @Override
                 public int compare(Vertex<K, Double> o1, Vertex<K, Double> o2) {
                     return o1.getValue().compareTo(o2.getValue());
@@ -153,7 +154,14 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
                     distance.put(vertex1.f1.getSource(), vertex1.f0);
                     unSettledVertices.add(new Vertex<>(vertex1.f1.getSource(), vertex1.f0));
                 }
-                valueEdges.add(vertex1);
+                if (vertexNeighbours.containsKey(vertex1.f1.getSource())) {
+                    vertexNeighbours.get(vertex1.f1.getSource()).add(new Tuple2<K, Double>(vertex1.f1.getTarget(), vertex1.f1.getValue()));
+                }
+                else {
+                    ArrayList<Tuple2<K, Double>> tmp = new ArrayList<>();
+                    tmp.add(new Tuple2<K, Double>(vertex1.f1.getTarget(), vertex1.f1.getValue()));
+                    vertexNeighbours.put(vertex1.f1.getSource(), tmp);
+                }
             }
 
             while (!unSettledVertices.isEmpty()) {
@@ -161,7 +169,9 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
                 // Only visit the vertex once
                 if (!settledVertices.contains(vertex.getId())) {
                     settledVertices.add(vertex.getId());
-                    findNeighbours(vertex, valueEdges.iterator());
+                    ArrayList<Tuple2<K, Double>> currentNeighbours = vertexNeighbours.get(vertex.getId());
+                    if (currentNeighbours != null)
+                        findNeighbours(vertex, currentNeighbours.iterator());
                 }
             }
 
@@ -181,7 +191,7 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
                     messageHistogram.add(context.getSuperstepNumber());
                 }
 
-                //Since a vertex can send multiple messages in one iteration,    && !partitionVertices.contains(targetVertice.getKey())
+                //Since a vertex can send multiple messages in one iteration,
                 //we need to count only the local receiving vertices
                 if (vertexHistogram != null) {
                     vertexHistogram.add(context.getSuperstepNumber());
@@ -189,20 +199,21 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
             }
         }
 
-        private void findNeighbours(Vertex<K, Double> sourceVertex, Iterator<Tuple2<Double, Edge<K, Double>>> vertices) {
+        private void findMin() {
+
+        }
+
+        private void findNeighbours(Vertex<K, Double> sourceVertex, Iterator<Tuple2<K, Double>> vertices) {
 
             while (vertices.hasNext()) {
-                Tuple2<Double, Edge<K, Double>> vertex = vertices.next();
-                Edge<K, Double> edge = vertex.f1;
-                if (edge.getSource().equals(sourceVertex.getId())) {
-                    Vertex<K, Double> neighbour = new Vertex<>(edge.getTarget(), vertex.f0 + edge.getValue());
-                    if (!settledVertices.contains(neighbour.getId())) {
-                        Double oldValue = distance.get(neighbour.getId());
-                        if (oldValue == null || oldValue > neighbour.getValue()) {
-                            distance.put(neighbour.getId(), neighbour.getValue());
-                        }
-                        unSettledVertices.add(neighbour);
+                Tuple2<K, Double> vertex = vertices.next();
+                Vertex<K, Double> neighbour = new Vertex<>(vertex.f0, sourceVertex.getValue() + vertex.f1);
+                if (!settledVertices.contains(neighbour.getId())) {
+                    Double oldValue = distance.get(neighbour.getId());
+                    if (oldValue == null || oldValue > neighbour.getValue()) {
+                        distance.put(neighbour.getId(), neighbour.getValue());
                     }
+                    unSettledVertices.add(neighbour);
                 }
             }
         }

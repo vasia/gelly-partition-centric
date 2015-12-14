@@ -51,7 +51,7 @@ public class GraphSSSPRunner {
             Long srcVertexId,
             String partitionCentricOutput) throws Exception {
 
-        boolean discardResult = false;
+        boolean discardResult = true;
         Map<String, String> fields = new HashMap<>();
         PartitionCentricConfiguration configuration = new PartitionCentricConfiguration();
         configuration.setTelemetryEnabled(true);
