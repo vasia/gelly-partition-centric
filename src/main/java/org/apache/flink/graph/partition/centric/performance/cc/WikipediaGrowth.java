@@ -64,6 +64,7 @@ public class WikipediaGrowth {
         switch (args[0]) {
             case "pc":
                 GraphCCRunner.detectComponentPC(
+                        "Wikipedia Partition Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "pcwikigrowth",
@@ -72,6 +73,7 @@ public class WikipediaGrowth {
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
+                        "Wikipedia Vertex Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "vcwikigrowth",

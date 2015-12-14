@@ -64,6 +64,7 @@ public class LiveJournalLink {
         switch (args[0]) {
             case "pc":
                 GraphCCRunner.detectComponentPC(
+                        "Livejournal Partition Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "pclivejournal",
@@ -72,6 +73,7 @@ public class LiveJournalLink {
                 break;
             case "vc":
                 GraphCCRunner.detectComponentVC(
+                        "Livejournal Vertex Centric",
                         wrapper.getEnvironment(),
                         graph,
                         wrapper.getOutputRoot() + "vclivejournal",
