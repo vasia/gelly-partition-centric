@@ -19,19 +19,12 @@
 
 package org.apache.flink.graph.partition.centric;
 
-import org.apache.flink.api.common.accumulators.Histogram;
-import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.utils.NullValueEdgeMapper;
 import org.apache.flink.types.NullValue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -41,25 +34,12 @@ import java.util.Map;
  * @param <K>
  * @param <EV>
  */
-public class PCConnectedComponents<K, EV> implements
-        GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
-
-    public static final String MESSAGE_SENT_CTR = "long:message_sent";
-    public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
-    public static final String ACTIVE_VER_ITER_CTR = "histogram:active_ver_iter_ctr";
-
+public class PCConnectedComponents<K, EV> implements GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
 
     private int maxIteration;
-    private final PartitionCentricConfiguration configuration;
 
     public PCConnectedComponents(int maxIteration) {
         this.maxIteration = maxIteration;
-        this.configuration = new PartitionCentricConfiguration();
-    }
-
-    public PCConnectedComponents(int maxIteration, PartitionCentricConfiguration configuration) {
-        this.maxIteration = maxIteration;
-        this.configuration = configuration;
     }
 
     @Override
@@ -70,9 +50,8 @@ public class PCConnectedComponents<K, EV> implements
 
         Graph<K, Long, NullValue> result =
                 pcGraph.runPartitionCentricIteration(
-                        new CCPartitionProcessFunction<K, NullValue>(configuration.isTelemetryEnabled()),
-                        new CCVertexUpdateFunction<K, NullValue>(),
-                        configuration, maxIteration);
+                        new CCPartitionProcessFunction<K, NullValue>(),
+                        new CCVertexUpdateFunction<K, NullValue>(), maxIteration);
 
         return result.getVertices();
     }
@@ -80,41 +59,21 @@ public class PCConnectedComponents<K, EV> implements
     /**
      * Partition update function
      */
-    public static final class CCPartitionProcessFunction<K, EV> extends
-            PartitionProcessFunction<K, Long, Long, EV> {
+    public static final class CCPartitionProcessFunction<K, EV> extends PartitionProcessFunction<K, Long, Long, EV> {
+
         private static final long serialVersionUID = 1L;
-        private static final Logger LOG = LoggerFactory.getLogger(CCPartitionProcessFunction.class);
-        private final boolean telemetryEnabled;
-
-        public CCPartitionProcessFunction() {
-            telemetryEnabled = false;
-        }
-
-        public CCPartitionProcessFunction(boolean telemetryEnabled) {
-            this.telemetryEnabled = telemetryEnabled;
-        }
 
         @Override
-        public void preSuperstep() {
-            if (telemetryEnabled) {
-                context.addAccumulator(MESSAGE_SENT_CTR, new LongCounter());
-                context.addAccumulator(MESSAGE_SENT_ITER_CTR, new Histogram());
-                context.addAccumulator(ACTIVE_VER_ITER_CTR, new Histogram());
-            }
-        }
-
-        @Override
-        public void processPartition(Iterable<Tuple2<Long, Edge<K, EV>>> vertices) throws Exception {
+        public void processPartition(Iterable<RichEdge<K, Long, EV>> edges) throws Exception {
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
-            for (Tuple2<Long, Edge<K, EV>> i : vertices) {
-                Long sourceValue = i.f0;
-                Edge<K, EV> edge = i.f1;
+            for (RichEdge<K, Long, EV> i : edges) {
+                Long sourceValue = i.getSourceValue();
                 UnionFindNode<Long> node;
-                if (nodeStore.containsKey(edge.getSource())) {
+                if (nodeStore.containsKey(i.getSourceId())) {
                     // This vertex has been inserted as an external node,
                     // update its initial value
-                    node = nodeStore.get(edge.getSource());
+                    node = nodeStore.get(i.getSourceId());
                     node.initialValue = sourceValue;
                     // Find the root and update its value if needed
                     UnionFindNode<Long> root = unionFind.find(node);
@@ -124,28 +83,22 @@ public class PCConnectedComponents<K, EV> implements
                 } else {
                     // New vertex
                     node = unionFind.makeNode(sourceValue);
-                    nodeStore.put(edge.getSource(), node);
+                    nodeStore.put(i.getSourceId(), node);
                 }
 
                 // The other end of the edge
                 UnionFindNode<Long> otherNode;
-                if (nodeStore.containsKey(edge.getTarget())) {
+                if (nodeStore.containsKey(i.getTargetId())) {
                     // Internal node
-                    otherNode = nodeStore.get(edge.getTarget());
+                    otherNode = nodeStore.get(i.getTargetId());
                 } else {
                     // Probably an external node, insert with the maximum component id
                     otherNode = unionFind.makeNode(Long.MAX_VALUE);
-                    nodeStore.put(edge.getTarget(), otherNode);
+                    nodeStore.put(i.getTargetId(), otherNode);
                 }
                 // Add the node to the union
                 unionFind.union(node, otherNode);
             }
-
-            Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
-            LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
-            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
-
-
 
             // Send messages to update nodes' value
             for(Map.Entry<K, UnionFindNode<Long>> entry: nodeStore.entrySet()) {
@@ -154,43 +107,28 @@ public class PCConnectedComponents<K, EV> implements
                 Long componentId = unionFind.find(node).value;
                 if (!componentId.equals(node.initialValue)) {
                     sendMessage(id, componentId);
-                    if (messageCounter != null) {
-                        messageCounter.add(1);
-                    }
-                    if (messageHistogram != null) {
-                        messageHistogram.add(context.getSuperstepNumber());
-                    }
-                }
-                // This can give the wrong number, if a vertex appears in multiple parallel partitions
-                // So we only count active vertices in the first iteration using this method
-                if (vertexHistogram != null &&
-                        node.initialValue != Long.MAX_VALUE &&
-                        context.getSuperstepNumber() == 1) {
-                    vertexHistogram.add(context.getSuperstepNumber());
                 }
             }
         }
     }
 
-    public static class CCVertexUpdateFunction<K, EV> extends VertexUpdateFunction<K, Long, Long, EV> {
+    @SuppressWarnings("serial")
+	public static class CCVertexUpdateFunction<K, EV> extends VertexUpdateFunction<K, Long, Long, EV> {
 
         @Override
-        public void updateVertex(Iterable<Tuple2<K, Long>> message) {
-            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
+        public void updateVertex(Vertex<K, Long> vertex, MessageIterator<Long> messages) {
+
             Long minValue = vertex.getValue();
-            for(Tuple2<K, Long> l: message) {
-                if (minValue > l.f1) {
-                    minValue = l.f1;
+            for(Long msg: messages) {
+                if (minValue > msg) {
+                    minValue = msg;
                 }
             }
             if (minValue < vertex.getValue()) {
-                setVertexValue(minValue);
-                // Counting the active vertices in the next iteration
-                if (vertexHistogram != null) {
-                    vertexHistogram.add(context.getSuperstepNumber() + 1);
-                }
+                setNewVertexValue(minValue);
             }
         }
+
     }
 
     private static class UnionFind<K extends Comparable<K>> {

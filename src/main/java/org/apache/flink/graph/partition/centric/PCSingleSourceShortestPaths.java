@@ -1,18 +1,20 @@
 package org.apache.flink.graph.partition.centric;
 
-import org.apache.flink.api.common.accumulators.Histogram;
-import org.apache.flink.api.common.accumulators.LongCounter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.Set;
+
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.*;
 
 
 /**
@@ -22,13 +24,8 @@ import java.util.*;
  */
 public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double, Double, DataSet<Vertex<K, Double>>> {
 
-    public static final String MESSAGE_SENT_CTR = "long:message_sent";
-    public static final String MESSAGE_SENT_ITER_CTR = "histogram:message_sent_iter_ctr";
-    public static final String ACTIVE_VER_ITER_CTR = "histogram:active_ver_iter_ctr";
-
     private K srcVertexId;
     private int maxIterations;
-    private final PartitionCentricConfiguration configuration;
 
     /**
      * Creates an instance of the Single Source Shortest Path algorithm - single argument constructor
@@ -39,20 +36,6 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
     public PCSingleSourceShortestPaths(K srcVertexId, int maxIterations) {
         this.srcVertexId = srcVertexId;
         this.maxIterations = maxIterations;
-        this.configuration = new PartitionCentricConfiguration();
-    }
-
-    /**
-     * Creates an instance of Single Source Shortest Path algorithm
-     *
-     * @param srcVertexId ID of the source vertex
-     * @param maxIterations Maximum number of iterations of algorithm
-     * @param configuration PartitionCentricConfiguration object for iterations
-     */
-    public PCSingleSourceShortestPaths(K srcVertexId, int maxIterations, PartitionCentricConfiguration configuration) {
-        this.srcVertexId = srcVertexId;
-        this.maxIterations = maxIterations;
-        this.configuration = configuration;
     }
 
     public K getSrcVertexId() {
@@ -77,14 +60,15 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
 
         Graph<K, Double, Double> result =
                 pcGraph.runPartitionCentricIteration(
-                        new SSSPPartitionProcessFunction<K>(configuration.isTelemetryEnabled()),
+                        new SSSPPartitionProcessFunction<K>(),
                         new SSSPVertexUpdateFunction<K>(),
-                        configuration, maxIterations);
+                        maxIterations);
 
         return result.getVertices();
     }
 
-    public static final class DoubleValueVertexMapper<K> implements MapFunction<Vertex<K, Double>, Double> {
+    @SuppressWarnings("serial")
+	public static final class DoubleValueVertexMapper<K> implements MapFunction<Vertex<K, Double>, Double> {
         private K srcVertexId;
 
         public DoubleValueVertexMapper(K srcVertexId) {
@@ -107,28 +91,9 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
      *
      * @param <K> Type of Vertex ID
      */
-    public static final class SSSPPartitionProcessFunction<K>  extends PartitionProcessFunction<K, Double, Double, Double> {
+    public static final class SSSPPartitionProcessFunction<K> extends PartitionProcessFunction<K, Double, Double, Double> {
 
         private static final long serialVersionUID = 1L;
-        private static final Logger LOG = LoggerFactory.getLogger(SSSPPartitionProcessFunction.class);
-        private final boolean telemetryEnabled;
-
-        public SSSPPartitionProcessFunction() {
-            telemetryEnabled = false;
-        }
-
-        public SSSPPartitionProcessFunction(boolean telemetryEnabled) {
-            this.telemetryEnabled = telemetryEnabled;
-        }
-
-        @Override
-        public void preSuperstep() {
-            if (telemetryEnabled) {
-                context.addAccumulator(MESSAGE_SENT_CTR, new LongCounter());
-                context.addAccumulator(MESSAGE_SENT_ITER_CTR, new Histogram());
-                context.addAccumulator(ACTIVE_VER_ITER_CTR, new Histogram());
-            }
-        }
 
         private Map<K, Double> distance;
         private Set<K> settledVertices;
@@ -136,7 +101,7 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
         private Map<K, ArrayList<Tuple2<K, Double>>> vertexNeighbours;
 
         @Override
-        public void processPartition(Iterable<Tuple2<Double, Edge<K, Double>>> vertices) throws Exception {
+        public void processPartition(Iterable<RichEdge<K, Double, Double>> edges) throws Exception {
 
             settledVertices = new HashSet<>();
             distance = new HashMap<>();
@@ -149,18 +114,19 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
                 }
             });
 
-            for (Tuple2<Double, Edge<K, Double>> vertex1 : vertices) {
-                if (vertex1.f0 < Double.MAX_VALUE) {
-                    distance.put(vertex1.f1.getSource(), vertex1.f0);
-                    unSettledVertices.add(new Vertex<>(vertex1.f1.getSource(), vertex1.f0));
+            for (RichEdge<K, Double, Double> edge : edges) {
+                if (edge.getSourceValue() < Double.MAX_VALUE) {
+                    distance.put(edge.getSourceId(), edge.getSourceValue());
+                    unSettledVertices.add(new Vertex<>(edge.getSourceId(), edge.getSourceValue()));
                 }
-                if (vertexNeighbours.containsKey(vertex1.f1.getSource())) {
-                    vertexNeighbours.get(vertex1.f1.getSource()).add(new Tuple2<K, Double>(vertex1.f1.getTarget(), vertex1.f1.getValue()));
+                if (vertexNeighbours.containsKey(edge.getSourceId())) {
+                    vertexNeighbours.get(edge.getSourceId()).add(new Tuple2<K, Double>(
+                    		edge.getTargetId(), edge.getEdgeValue()));
                 }
                 else {
                     ArrayList<Tuple2<K, Double>> tmp = new ArrayList<>();
-                    tmp.add(new Tuple2<K, Double>(vertex1.f1.getTarget(), vertex1.f1.getValue()));
-                    vertexNeighbours.put(vertex1.f1.getSource(), tmp);
+                    tmp.add(new Tuple2<K, Double>(edge.getTargetId(), edge.getEdgeValue()));
+                    vertexNeighbours.put(edge.getSourceId(), tmp);
                 }
             }
 
@@ -174,33 +140,6 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
                         findNeighbours(vertex, currentNeighbours.iterator());
                 }
             }
-
-            Histogram messageHistogram = context.getHistogram(MESSAGE_SENT_ITER_CTR);
-            LongCounter messageCounter = context.getLongCounter(MESSAGE_SENT_CTR);
-            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
-
-            //Send minimum path values to target vertices
-            for (Map.Entry<K, Double> targetVertex : distance.entrySet()) {
-
-                sendMessage(targetVertex.getKey(), targetVertex.getValue());
-
-                if (messageCounter != null) {
-                    messageCounter.add(1);
-                }
-                if (messageHistogram != null) {
-                    messageHistogram.add(context.getSuperstepNumber());
-                }
-
-                //Since a vertex can send multiple messages in one iteration,
-                //we need to count only the local receiving vertices
-                if (vertexHistogram != null) {
-                    vertexHistogram.add(context.getSuperstepNumber());
-                }
-            }
-        }
-
-        private void findMin() {
-
         }
 
         private void findNeighbours(Vertex<K, Double> sourceVertex, Iterator<Tuple2<K, Double>> vertices) {
@@ -217,6 +156,7 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
                 }
             }
         }
+
     }
 
     /**
@@ -224,30 +164,25 @@ public class PCSingleSourceShortestPaths<K> implements GraphAlgorithm<K, Double,
      *
      * @param <K> Type of vertex ID
      */
-    public static class SSSPVertexUpdateFunction<K> extends VertexUpdateFunction<K, Double, Double, Double> {
+    @SuppressWarnings("serial")
+	public static class SSSPVertexUpdateFunction<K> extends VertexUpdateFunction<K, Double, Double, Double> {
 
         @Override
-        public void updateVertex(Iterable<Tuple2<K, Double>> message) {
-            Histogram vertexHistogram = context.getHistogram(ACTIVE_VER_ITER_CTR);
+        public void updateVertex(Vertex<K, Double> vertex, MessageIterator<Double> messages) {
+
             Double minValue = vertex.getValue();
 
             //find the new minimal value (from current value and message values)
-            for (Tuple2<K, Double> m : message) {
-                if (minValue > m.f1)
-                    minValue = m.f1;
+            for (double m : messages) {
+                if (minValue > m)
+                    minValue = m;
             }
 
             //If vertex value bigger than minValue, update vertex value
             //and increase the Active Vertex counter for the next iteration
             if (minValue < vertex.getValue()) {
-                setVertexValue(minValue);
-
-                if (vertexHistogram != null) {
-                    vertexHistogram.add(context.getSuperstepNumber() + 1);
-                }
+                setNewVertexValue(minValue);
             }
         }
     }
-
 }
-
