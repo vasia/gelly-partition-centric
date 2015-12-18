@@ -19,10 +19,7 @@
 
 package org.apache.flink.graph.partition.centric;
 
-import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.graph.IterationConfiguration;
-
-import java.util.HashMap;
 
 /**
  * Configuration object for a partition centric iteration

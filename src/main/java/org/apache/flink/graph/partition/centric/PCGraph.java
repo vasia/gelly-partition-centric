@@ -25,8 +25,6 @@ import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.vertex.centric.MessagingFunction;
 import org.apache.flink.graph.vertex.centric.VertexCentricIteration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Represent a partition centric graph.
@@ -36,7 +34,7 @@ import org.slf4j.LoggerFactory;
  * @param <EV> The type of an edge's value
  */
 public class PCGraph<K, VV, EV> {
-    private static final Logger LOG = LoggerFactory.getLogger(PCGraph.class);
+
     private final Graph<K, VV, EV> graph;
 
     public PCGraph(Graph<K, VV, EV> graph) {
@@ -46,13 +44,12 @@ public class PCGraph<K, VV, EV> {
     public<Message> Graph<K, VV, EV> runPartitionCentricIteration(
             PartitionProcessFunction<K, VV, Message, EV> updateFunction,
             VertexUpdateFunction<K, VV, Message, EV> vertexUpdateFunction,
-            PartitionCentricConfiguration configuration,
             int maximumNumOperations) {
         DataSet<Edge<K, EV>> edges = graph.getEdges();
         DataSet<Vertex<K, VV>> vertices = graph.getVertices();
 
         PartitionCentricIteration<K, VV, Message, EV> iteration = new PartitionCentricIteration<>(
-                updateFunction, vertexUpdateFunction, maximumNumOperations, edges, configuration);
+                updateFunction, vertexUpdateFunction, maximumNumOperations, edges);
 
         DataSet<Vertex<K, VV>> updatedVertices = vertices.runOperation(iteration);
 

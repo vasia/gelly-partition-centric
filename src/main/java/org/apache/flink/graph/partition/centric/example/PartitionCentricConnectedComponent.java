@@ -19,18 +19,15 @@
 
 package org.apache.flink.graph.partition.centric.example;
 
-import org.apache.flink.api.common.typeinfo.IntegerTypeInfo;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.partition.centric.*;
-import org.apache.flink.types.NullValue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.*;
+import org.apache.flink.graph.partition.centric.PCConnectedComponents;
 
 /**
  * Example for partition centric iteration
