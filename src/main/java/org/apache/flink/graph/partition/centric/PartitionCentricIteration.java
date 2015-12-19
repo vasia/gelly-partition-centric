@@ -19,8 +19,8 @@
 
 package org.apache.flink.graph.partition.centric;
 
+import org.apache.flink.api.common.functions.CoGroupFunction;
 import org.apache.flink.api.common.functions.RichCoGroupFunction;
-import org.apache.flink.api.common.functions.RichJoinFunction;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
@@ -28,7 +28,6 @@ import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsFir
 import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsSecond;
 import org.apache.flink.api.java.operators.CustomUnaryOperation;
 import org.apache.flink.api.java.operators.DeltaIteration;
-import org.apache.flink.api.java.operators.JoinOperator;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
@@ -37,6 +36,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.util.Collector;
+
 import java.util.Iterator;
 
 /**
@@ -93,17 +93,17 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         String defaultName = "Partition-centric iteration (" + partitionProcessFunction + " | " + vertexUpdateFunction + ")";
         iteration.name(defaultName);
 
-        TupleTypeInfo<RichEdge<K, VV, EV>> partitionType = new TupleTypeInfo<>(
+        TypeInformation<RichEdge<K, VV, EV>> partitionType = new TupleTypeInfo<>(
                 ((TupleTypeInfo<?>) vertexType).getTypeAt(0),
                 ((TupleTypeInfo<?>) vertexType).getTypeAt(1),
                 ((TupleTypeInfo<?>) edgeType).getTypeAt(2),
                 ((TupleTypeInfo<?>) edgeType).getTypeAt(1)
         );
 
-        // Join the edges into the vertices
-        JoinOperator<?, ?, RichEdge<K, VV, EV>> vertexEdges = iteration.getWorkset()
-        		.join(edges).where(0).equalTo(0).with(
-        				new AdjacencyListBuilder<K, VV, EV>(partitionType));
+        // Prepare the partition input
+        DataSet<RichEdge<K, VV, EV>> vertexEdges = iteration.getWorkset()
+        	.coGroup(edges).where(0).equalTo(0).with(
+        		new PreparePartitionInput<K, VV, EV>(partitionType));
 
         // Update the partition, receive a dataset of message
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
@@ -238,28 +238,36 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 		}
     }
 
-    @SuppressWarnings("serial")
-	@ForwardedFieldsFirst("*")
+    
+	@SuppressWarnings("serial")
+	@ForwardedFieldsFirst("f0->f0; f1->f1")
     @ForwardedFieldsSecond("f2->f2; f1->f3")
-    private static class AdjacencyListBuilder<K, VV, EV> extends
-            RichJoinFunction<Vertex<K,VV>, Edge<K, EV>, RichEdge<K, VV, EV>> implements
-            ResultTypeQueryable<RichEdge<K, VV, EV>>{
+	private static class PreparePartitionInput<K, VV, EV> implements
+    		CoGroupFunction<Vertex<K, VV>, Edge<K, EV>, RichEdge<K, VV, EV>>,
+    		ResultTypeQueryable<RichEdge<K, VV, EV>> {
 
-        private transient final TypeInformation<RichEdge<K, VV, EV>> resultType;
+        private transient TypeInformation<RichEdge<K, VV, EV>> resultType;
 
-        private AdjacencyListBuilder(TypeInformation<RichEdge<K, VV, EV>> resultType) {
+        private PreparePartitionInput(TypeInformation<RichEdge<K, VV, EV>> resultType) {
             this.resultType = resultType;
         }
 
-        @Override
-        public RichEdge<K, VV, EV> join(Vertex<K, VV> vertex, Edge<K, EV> edge) throws Exception {
-            return new RichEdge<>(vertex.getId(), vertex.getValue(), edge.getValue(), edge.getTarget());
-        }
+		public void coGroup(Iterable<Vertex<K, VV>> vertex,
+			Iterable<Edge<K, EV>> edges, Collector<RichEdge<K, VV, EV>> out) {
+			
+			final Iterator<Vertex<K, VV>> vertexIt = vertex.iterator();
+			if (vertexIt.hasNext()) {
+				Vertex<K, VV> v = vertexIt.next();
+				for (Edge<K, EV> e: edges) {
+					out.collect(new RichEdge<K, VV, EV>(
+						v.getId(), v.getValue(), e.getValue(), e.getTarget()));	
+				}
+			}
+		}
 
-        @Override
-        public TypeInformation<RichEdge<K, VV, EV>> getProducedType() {
-            return resultType;
-        }
-    }
-
+		@Override
+		public TypeInformation<RichEdge<K, VV, EV>> getProducedType() {
+			return resultType;
+		}
+	}
 }

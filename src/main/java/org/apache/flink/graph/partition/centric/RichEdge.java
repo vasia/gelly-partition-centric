@@ -28,8 +28,10 @@ import org.apache.flink.api.java.tuple.Tuple4;
  * @param <VV> the vertex value type
  * @param <EV> the edge value type
  */
-@SuppressWarnings("serial")
+
 public class RichEdge<K, VV, EV> extends Tuple4<K, VV, EV, K> {
+
+	private static final long serialVersionUID = 1L;
 
 	public RichEdge() {}
 
