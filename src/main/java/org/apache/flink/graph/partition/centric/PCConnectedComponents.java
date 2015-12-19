@@ -20,7 +20,6 @@
 package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
@@ -69,9 +68,9 @@ public class PCConnectedComponents<K, EV> implements GraphAlgorithm<K, Long, EV,
         public void processPartition(Iterable<RichEdge<K, Long, EV>> edges) throws Exception {
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
-            for (Tuple4<?, ?, ?, ?> it : edges) {
+            for (RichEdge<K, Long, EV> i : edges) {
             	//TODO: investigate class cast exception thrown here
-            	RichEdge<K, Long, EV> i = new RichEdge<K, Long, EV>((K)it.f0, (Long)it.f1, (EV)it.f2, (K)it.f3);
+//            	RichEdge<K, Long, EV> i = new RichEdge<K, Long, EV>((K)it.f0, (Long)it.f1, (EV)it.f2, (K)it.f3);
                 Long sourceValue = i.getSourceValue();
                 UnionFindNode<Long> node;
                 if (nodeStore.containsKey(i.getSourceId())) {

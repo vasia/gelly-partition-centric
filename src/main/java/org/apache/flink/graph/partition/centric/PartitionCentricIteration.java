@@ -83,7 +83,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
             throw new RuntimeException("Initial vertices not set");
         }
         TypeInformation<Vertex<K, VV>> vertexType = initialVertices.getType();
-        TypeInformation<Edge<K, EV>> edgeType = edges.getType();
         TypeInformation<K> keyType = ((TupleTypeInfo<?>) vertexType).getTypeAt(0);
         TypeInformation<Tuple2<K, Message>> messageTypeInfo = new TupleTypeInfo<>(keyType, messageType);
 
@@ -93,21 +92,13 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
         String defaultName = "Partition-centric iteration (" + partitionProcessFunction + " | " + vertexUpdateFunction + ")";
         iteration.name(defaultName);
 
-        TypeInformation<RichEdge<K, VV, EV>> partitionType = new TupleTypeInfo<>(
-                ((TupleTypeInfo<?>) vertexType).getTypeAt(0),
-                ((TupleTypeInfo<?>) vertexType).getTypeAt(1),
-                ((TupleTypeInfo<?>) edgeType).getTypeAt(2),
-                ((TupleTypeInfo<?>) edgeType).getTypeAt(1)
-        );
-
         // Prepare the partition input
         DataSet<RichEdge<K, VV, EV>> vertexEdges = iteration.getWorkset()
-        	.coGroup(edges).where(0).equalTo(0).with(
-        		new PreparePartitionInput<K, VV, EV>(partitionType));
+        	.coGroup(edges).where(0).equalTo(0).with(new PreparePartitionInput<K, VV, EV>());
 
         // Update the partition, receive a dataset of message
         PartitionUpdateUdf<K, VV, EV, Message> partitionUpdater =
-                new PartitionUpdateUdf<>(partitionProcessFunction, messageTypeInfo);
+        		new PartitionUpdateUdf<>(partitionProcessFunction, messageTypeInfo);
 
         DataSet<Tuple2<K, Message>> messages = vertexEdges.mapPartition(partitionUpdater);
 
@@ -243,14 +234,7 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 	@ForwardedFieldsFirst("f0->f0; f1->f1")
     @ForwardedFieldsSecond("f2->f2; f1->f3")
 	private static class PreparePartitionInput<K, VV, EV> implements
-    		CoGroupFunction<Vertex<K, VV>, Edge<K, EV>, RichEdge<K, VV, EV>>,
-    		ResultTypeQueryable<RichEdge<K, VV, EV>> {
-
-        private transient TypeInformation<RichEdge<K, VV, EV>> resultType;
-
-        private PreparePartitionInput(TypeInformation<RichEdge<K, VV, EV>> resultType) {
-            this.resultType = resultType;
-        }
+    		CoGroupFunction<Vertex<K, VV>, Edge<K, EV>, RichEdge<K, VV, EV>> {
 
 		public void coGroup(Iterable<Vertex<K, VV>> vertex,
 			Iterable<Edge<K, EV>> edges, Collector<RichEdge<K, VV, EV>> out) {
@@ -263,11 +247,6 @@ public class PartitionCentricIteration<K, VV, Message, EV> implements
 						v.getId(), v.getValue(), e.getValue(), e.getTarget()));	
 				}
 			}
-		}
-
-		@Override
-		public TypeInformation<RichEdge<K, VV, EV>> getProducedType() {
-			return resultType;
 		}
 	}
 }
