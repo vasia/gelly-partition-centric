@@ -21,8 +21,6 @@ package org.apache.flink.graph.partition.centric.example;
 
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
-
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
@@ -51,17 +49,10 @@ public class PartitionCentricConnectedComponent {
         );
         Collection<Edge<Integer, Integer>> edges = Arrays.asList(
                 new Edge<>(1, 2, 1),
-                new Edge<>(2, 1, 1),
                 new Edge<>(2, 3, 1),
-                new Edge<>(3, 2, 1),
                 new Edge<>(3, 1, 1),
-                new Edge<>(1, 3, 1),
                 new Edge<>(3, 4, 1),
-                new Edge<>(4, 3, 1),
-
                 new Edge<>(5, 6, 1),
-                new Edge<>(6, 5, 1),
-                new Edge<>(6, 7, 1),
                 new Edge<>(7, 6, 1)
         );
 
@@ -72,11 +63,7 @@ public class PartitionCentricConnectedComponent {
         Graph<Integer, Long, Integer> graph = Graph.fromCollection(vertices, edges, environment);
 
         PCConnectedComponents<Integer, Integer> connectedComponents = new PCConnectedComponents<>(10);
-        List<Vertex<Integer, Long>> ret = connectedComponents.run(graph).collect();
+        connectedComponents.run(graph).print();
 
-        for(Vertex<Integer, Long> vertex: ret) {
-            System.out.printf("Vertex id: %d, value: %d%n",
-                    vertex.getId(), vertex.getValue());
-        }
     }
 }
