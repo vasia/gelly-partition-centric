@@ -23,8 +23,6 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.vertex.centric.MessagingFunction;
-import org.apache.flink.graph.vertex.centric.VertexCentricIteration;
 
 /**
  * Represent a partition centric graph.
@@ -54,19 +52,5 @@ public class PCGraph<K, VV, EV> {
         DataSet<Vertex<K, VV>> updatedVertices = vertices.runOperation(iteration);
 
         return Graph.fromDataSet(updatedVertices, edges, graph.getContext());
-    }
-
-    public<M> Graph<K, VV, EV> runVertexCentricIteration(
-            org.apache.flink.graph.vertex.centric.VertexUpdateFunction<K, VV, M> vertexUpdateFunction,
-            MessagingFunction<K, VV, M, EV> messagingFunction,
-            int maximumNumberOfIterations) {
-        VertexCentricIteration<K, VV, M, EV> iteration = VertexCentricIteration.withEdges(
-                graph.getEdges(), vertexUpdateFunction, messagingFunction, maximumNumberOfIterations);
-
-        iteration.configure(null);
-
-        DataSet<Vertex<K, VV>> newVertices = graph.getVertices().runOperation(iteration);
-
-        return Graph.fromDataSet(newVertices, graph.getEdges(), graph.getContext());
     }
 }

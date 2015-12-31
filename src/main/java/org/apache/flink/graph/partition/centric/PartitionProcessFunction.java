@@ -26,12 +26,16 @@ import org.apache.flink.util.Collector;
 import java.io.Serializable;
 
 /**
- * Users need to subclass this class and implement their partition processing method
+ * This class must be extended by functions that compute the state of the vertex
+ * inside each partition.
+ * <p>
+ * The central method is {@link #processPartition(Iterable)}, which is
+ * invoked once per partition per superstep.
  *
- * @param <K> The type of a vertex's id
- * @param <VV> The type of a vertex's value
- * @param <Message> The type of message to send
- * @param <EV> The type of an edge's value
+ * @param <K> The vertex ID type
+ * @param <VV> The vertex value type
+ * @param <Message> The message type
+ * @param <EV> The edge value type
  */
 public abstract class PartitionProcessFunction<K, VV, Message, EV> implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -60,7 +64,10 @@ public abstract class PartitionProcessFunction<K, VV, Message, EV> implements Se
 
     /**
      * Call this method to send a message to a vertex
-     * @param vertex The destination vertex's id
+     * that belongs to this or another partition.
+     * The message will be delivered to the vertex during the same superstep. 
+     * 
+     * @param vertex The destination vertex ID
      * @param message The message content
      */
     protected void sendMessage(K vertex, Message message) {
@@ -68,11 +75,16 @@ public abstract class PartitionProcessFunction<K, VV, Message, EV> implements Se
     }
 
     /**
-     * Call this function to process the partition.
-     *
-     * @param vertices Iterable of vertices and their respective adjacency list
+     * This method is invoked once per partition in the beginning of each superstep.
+     * It receives the current state of the vertices inside this partition and the
+     * state of all out-going edges for each internal vertex. 
+     * The method can generate messages to vertices inside this partition or other
+     * partitions. The messages will be delivered during the same superstep.
+     * 
+     * @param edges the {@link RichEdge}s in this partition.
+     * The source vertex of each RichEdge is an internal vertex
+     * in this partition.
      * @throws Exception
      */
-    public abstract void processPartition(Iterable<RichEdge<K, VV, EV>> edges)
-            throws Exception;
+    public abstract void processPartition(Iterable<RichEdge<K, VV, EV>> edges) throws Exception;
 }

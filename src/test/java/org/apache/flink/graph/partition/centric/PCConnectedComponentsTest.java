@@ -26,7 +26,6 @@ import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.partition.centric.utils.GraphGenerator;
 import org.apache.flink.test.testdata.ConnectedComponentsData;
-import org.apache.flink.types.NullValue;
 import org.junit.Test;
 
 import java.util.List;
@@ -37,7 +36,8 @@ import java.util.List;
  */
 public class PCConnectedComponentsTest {
 
-    @Test
+    @SuppressWarnings("serial")
+	@Test
     public void testRun() throws Exception {
         int verticesCount = 5000;
         int edgesCount = verticesCount * 2;
