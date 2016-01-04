@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.flink.graph.partition.centric.utils;
+package org.apache.flink.graph.partition.centric;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;

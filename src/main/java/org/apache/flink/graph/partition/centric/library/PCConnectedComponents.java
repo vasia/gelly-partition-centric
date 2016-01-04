@@ -17,12 +17,17 @@
  * under the License.
  */
 
-package org.apache.flink.graph.partition.centric;
+package org.apache.flink.graph.partition.centric.library;
 
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.partition.centric.MessageIterator;
+import org.apache.flink.graph.partition.centric.PCGraph;
+import org.apache.flink.graph.partition.centric.PartitionProcessFunction;
+import org.apache.flink.graph.partition.centric.RichEdge;
+import org.apache.flink.graph.partition.centric.VertexUpdateFunction;
 import org.apache.flink.graph.utils.NullValueEdgeMapper;
 import org.apache.flink.types.NullValue;
 
@@ -32,8 +37,8 @@ import java.util.Map;
 /**
  * Connected components algorithm implemented using partition centric iteration
  *
- * @param <K>
- * @param <EV>
+ * @param <K> the vertx ID type
+ * @param <EV> the edge value type
  */
 public class PCConnectedComponents<K, EV> implements GraphAlgorithm<K, Long, EV, DataSet<Vertex<K, Long>>> {
 
@@ -69,8 +74,6 @@ public class PCConnectedComponents<K, EV> implements GraphAlgorithm<K, Long, EV,
             HashMap<K, UnionFindNode<Long>> nodeStore = new HashMap<>();
             UnionFind<Long> unionFind = new UnionFind<>();
             for (RichEdge<K, Long, EV> i : edges) {
-            	//TODO: investigate class cast exception thrown here
-//            	RichEdge<K, Long, EV> i = new RichEdge<K, Long, EV>((K)it.f0, (Long)it.f1, (EV)it.f2, (K)it.f3);
                 Long sourceValue = i.getSourceValue();
                 UnionFindNode<Long> node;
                 if (nodeStore.containsKey(i.getSourceId())) {

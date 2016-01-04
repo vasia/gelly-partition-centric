@@ -1,4 +1,4 @@
-package org.apache.flink.graph.partition.centric;
+package org.apache.flink.graph.partition.centric.library;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +15,11 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.GraphAlgorithm;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.partition.centric.MessageIterator;
+import org.apache.flink.graph.partition.centric.PCGraph;
+import org.apache.flink.graph.partition.centric.PartitionProcessFunction;
+import org.apache.flink.graph.partition.centric.RichEdge;
+import org.apache.flink.graph.partition.centric.VertexUpdateFunction;
 
 
 /**

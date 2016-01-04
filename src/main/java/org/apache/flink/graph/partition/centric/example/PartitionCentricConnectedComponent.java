@@ -21,11 +21,12 @@ package org.apache.flink.graph.partition.centric.example;
 
 import java.util.Arrays;
 import java.util.Collection;
+
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.partition.centric.PCConnectedComponents;
+import org.apache.flink.graph.partition.centric.library.PCConnectedComponents;
 
 /**
  * Example for partition centric iteration

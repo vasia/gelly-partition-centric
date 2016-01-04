@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.partition.centric.utils;
+package org.apache.flink.graph.partition.centric;
 import java.util.Random;
 
 
